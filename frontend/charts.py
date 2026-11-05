@@ -8,8 +8,8 @@ Design rules (see docs/dashboard.md):
   direct labels.
 * Identity is never color-alone: agent names are on the axis or directly labelled.
 * One y-axis per chart; latency, tokens and cost are separate charts.
-* Status colors (good / warning / critical) are reserved for trace step outcomes and always come
-  with an icon + label.
+* Status colors (good / warning / critical) are reserved for outcomes (trace steps, freshness
+  verdicts) and always come with an icon + label.
 """
 
 from __future__ import annotations
@@ -375,6 +375,54 @@ def category_bars(board: list[dict], colors: dict[int, str]) -> go.Figure:
         )
     _layout(fig, "Accuracy by category", height=360, barmode="group")
     fig.update_yaxes(range=[0, 1.05], tickformat=".0%")
+    return fig
+
+
+# ------------------------------------------------------------------------------------ freshness
+SURFACE = "#0e1117"
+FRESHNESS_STYLE: dict[str, tuple[str, str, str]] = {
+    # answer verdict -> (fill, legend label, segment-text ink). Outcomes, so status colors + icons.
+    "fresh": (STATUS["good"], "✅ fresh", HEAT_INK_DARK),
+    "stale": (STATUS["warning"], "⚠️ stale", HEAT_INK_DARK),
+    "wrong": (STATUS["critical"], "❌ wrong", INK),
+    "unverified": (OTHER, "❔ unverified", HEAT_INK_DARK),
+    "no_claims": (AXIS, "∅ no claim / timeless", INK),
+}
+
+
+def freshness_bars(board: list[dict]) -> go.Figure:
+    """100%-stacked bar per agent: share of its checked answers by freshness verdict.
+
+    ``timeless`` folds into ``no_claims`` (neither had anything time-sensitive to verify). Segments are
+    separated by a 2px surface gap; counts are labelled inside, and hover gives count and share."""
+    rows = [r for r in board if r.get("freshness_checked")][::-1]  # plotly draws bottom-up
+    names = [r["agent_name"] for r in rows]
+    fig = go.Figure()
+    for verdict, (fill, label, ink) in FRESHNESS_STYLE.items():
+        counts = []
+        for r in rows:
+            v = r.get("freshness_verdicts") or {}
+            counts.append(v.get(verdict, 0) + (v.get("timeless", 0) if verdict == "no_claims" else 0))
+        shares = [c / r["freshness_checked"] for c, r in zip(counts, rows, strict=True)]
+        fig.add_trace(
+            go.Bar(
+                y=names,
+                x=shares,
+                orientation="h",
+                name=label,
+                marker={"color": fill, "line": {"color": SURFACE, "width": 2}},
+                text=[str(c) if c else "" for c in counts],
+                textposition="inside",
+                insidetextanchor="middle",
+                insidetextfont={"color": ink},
+                customdata=counts,
+                hovertemplate=f"<b>%{{y}}</b><br>{label}: %{{customdata}} (%{{x:.0%}})<extra></extra>",
+            )
+        )
+    _layout(fig, "Freshness of answers to time-sensitive tasks", height=max(220, 70 + 52 * len(rows)))
+    fig.update_layout(barmode="stack", bargap=0.3, legend_traceorder="normal")
+    fig.update_xaxes(range=[0, 1], tickformat=".0%", showgrid=False)
+    fig.update_yaxes(showgrid=False, tickfont={"color": INK_2})
     return fig
 
 

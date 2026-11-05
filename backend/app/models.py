@@ -76,6 +76,8 @@ class BenchmarkRun(Base):
     repeats: Mapped[int] = mapped_column(Integer, default=1)
     fault_rate: Mapped[float] = mapped_column(Float, default=0.0)
     mock_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    check_freshness: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
+    """Run the stale-answer detector on answers to time-sensitive tasks."""
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|running|done|failed
     progress_done: Mapped[int] = mapped_column(Integer, default=0)
     progress_total: Mapped[int] = mapped_column(Integer, default=0)
@@ -117,6 +119,8 @@ class TaskExecution(Base):
     recovered: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     freshness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    freshness_verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # fresh|stale|wrong|unverified|timeless|no_claims; NULL = not checked
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     run: Mapped[BenchmarkRun | None] = relationship(back_populates="executions")
@@ -144,6 +148,8 @@ class TraceStep(Base):
 
 
 class FreshnessCheck(Base):
+    """One stale-answer check of a text (pasted, or an execution's answer)."""
+
     __tablename__ = "freshness_checks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -151,7 +157,13 @@ class FreshnessCheck(Base):
         ForeignKey("task_executions.id", ondelete="SET NULL"), nullable=True, index=True
     )
     input_text: Mapped[str] = mapped_column(Text)
+    question: Mapped[str | None] = mapped_column(Text, nullable=True)
     freshness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)  # see checker.CHECK_VERDICTS
+    extraction: Mapped[str | None] = mapped_column(String(80), nullable=True)  # llm | heuristic (...)
+    mock_mode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # text | execution | benchmark
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="done")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -168,10 +180,14 @@ class Claim(Base):
     text: Mapped[str] = mapped_column(Text)
     time_sensitive: Mapped[bool] = mapped_column(Boolean, default=False)
     query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    topic: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    signals: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     verdict: Mapped[str] = mapped_column(String(20), default="unverifiable")
     # verdict: current|outdated|contradicted|unverifiable|not_time_sensitive
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     explanation: Mapped[str] = mapped_column(Text, default="")
+    correction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     check: Mapped[FreshnessCheck] = relationship(back_populates="claims")

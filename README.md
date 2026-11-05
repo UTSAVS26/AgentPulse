@@ -17,7 +17,7 @@ still true today, extracting time-sensitive claims and verifying them against li
 | Scoring, reliability & freshness analytics | AgentPulse evaluation engine |
 | API / UI / storage | FastAPI · Streamlit · PostgreSQL |
 
-> **Status:** Phase 4 of 7. Comparison dashboard (radar, cost/latency/token charts, task heatmap) and execution trace viewer. See [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Phase 5 of 7. Stale-answer detector: claim extraction, live Tavily verification with dated sources, automatic freshness scoring of benchmark answers. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Live demo
 
@@ -54,7 +54,8 @@ Full instructions, API keys, Ollama setup and troubleshooting: **[docs/setup.md]
 - [Agents](docs/agents.md): agent definition, default agents, tools, runtime loop, fault injection
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula and the reliability score
-- [Dashboard](docs/dashboard.md): pages, Compare charts, Traces, chart design rules
+- [Dashboard](docs/dashboard.md): pages, Compare charts, Traces, Stale-Answer Detector, chart design rules
+- [Stale-answer detection](docs/stale-answer-detection.md): pipeline, verdicts, freshness score, rate limits, live results
 - [Deployment](docs/deployment.md): Render auto-deploy (free Docker service), access code, secrets
 - [Continuous integration](docs/ci.md): what runs on every push and how to run it locally
 - [API reference](docs/api.md): endpoints with curl examples (full spec at http://localhost:8000/docs)

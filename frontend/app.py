@@ -20,7 +20,11 @@ whether their answers are **still true today** with live web verification.
 | Live search & claim verification | **Tavily** |
 | Scoring, reliability & freshness analytics | AgentPulse evaluation engine |
 
-**Get started:** open **Agents** in the sidebar to inspect the pre-configured agents and run
-one on a prompt, with optional fault injection to test how it recovers.
+**Get started**
+
+1. **Agents**: inspect the pre-configured agents and try one on a prompt, with optional fault injection.
+2. **Run Benchmark**: run a suite × agents × repeats; **Compare** and **Traces** explain the results.
+3. **Stale-Answer Detector**: paste any AI answer and see which claims are no longer true, with dated sources.
+   Benchmark answers to time-sensitive tasks are checked automatically.
 """
 )

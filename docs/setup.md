@@ -26,6 +26,8 @@ cp .env.example .env
 | `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `120` / `20` | Outbound request timeouts |
 | `LIVE_ACCESS_CODE` | – | Public-demo mode: with `MOCK_MODE=true`, requests are mock unless they send this code (dashboard sidebar → *Unlock live mode*). Admin actions also need it. See [deployment.md](deployment.md). |
 | `JUDGE_MODEL` | `groq/openai/gpt-oss-120b` | Model used by the `judge` scorer (live mode) |
+| `FRESHNESS_MODEL` / `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-120b` / `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b` | Stale-answer detector's extraction + judge model, then fallbacks on rate limits. See [stale-answer-detection.md](stale-answer-detection.md#configuration). |
+| `FRESHNESS_SEARCH_DEPTH` | `advanced` | Tavily depth for automatic checks during benchmark runs |
 
 Provider keys are read **only by Bifrost** (see `bifrost/config.json`, which uses `env.` references). The backend never sees them.
 

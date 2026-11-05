@@ -71,6 +71,17 @@ def main() -> int:
     _, metrics = call("GET", f"/runs/{run['id']}/metrics")
     check("metrics computed", len(metrics.get("leaderboard", [])) == 2, metrics.get("leaderboard"))
 
+    status, fc = call(
+        "POST", "/freshness/check", {"text": "The current UK PM is Rishi Sunak. Water boils at 100 °C."}
+    )
+    check(
+        "stale-answer detector (mock)",
+        status == 201
+        and fc.get("verdict") == "stale"
+        and fc.get("counts", {}).get("not_time_sensitive") == 1,
+        fc,
+    )
+
     check("wrong access code -> 401", call("GET", "/health", code="nope")[0] == 401)
     status, live = call("GET", "/health", code=CODE)
     check("right access code -> live mode", status == 200 and live.get("mock_mode") is False, live)

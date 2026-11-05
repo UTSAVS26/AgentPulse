@@ -13,6 +13,9 @@ recovery_rate     recovered / executions that experienced a failure (injected fa
                   or LLM retry); recovered = failure happened AND the task still passed
 latency p50/p95   percentiles of per-execution latency (ms, linear interpolation)
 cost              list-price USD from token usage; cost_per_correct = total cost / passed
+freshness         mean freshness score of the answers the stale-answer detector checked
+                  (time-sensitive tasks only); stale_rate = answers judged stale / answers checked.
+                  Reported next to, not inside, the reliability score.
 
 reliability_score = weighted mean of the available components:
     accuracy 0.40 · consistency 0.25 · recovery_rate 0.20 · (1 − error_rate) 0.15
@@ -23,7 +26,7 @@ reliability_score = weighted mean of the available components:
 from __future__ import annotations
 
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -34,6 +37,9 @@ RELIABILITY_WEIGHTS: dict[str, float] = {
     "recovery_rate": 0.20,
     "stability": 0.15,  # 1 - error_rate
 }
+
+
+FRESHNESS_VERDICTS = ("fresh", "stale", "wrong", "unverified", "timeless", "no_claims")
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,8 @@ class ExecRecord:
     retries: int
     tool_errors: int
     recovered: bool
+    freshness_score: float | None = None
+    freshness_verdict: str | None = None
 
     @property
     def had_failure(self) -> bool:
@@ -80,6 +88,8 @@ class ExecRecord:
             retries=e.retries or 0,
             tool_errors=e.tool_errors or 0,
             recovered=bool(e.recovered),
+            freshness_score=getattr(e, "freshness_score", None),
+            freshness_verdict=getattr(e, "freshness_verdict", None),
         )
 
 
@@ -145,6 +155,9 @@ def agent_metrics(records: Sequence[ExecRecord]) -> dict[str, Any]:
     }
     score, weights = reliability_score(components)
 
+    checked = [r for r in records if r.freshness_verdict]
+    verdicts = Counter(r.freshness_verdict for r in checked)
+
     return {
         "executions": n,
         "passed": passed,
@@ -172,6 +185,11 @@ def agent_metrics(records: Sequence[ExecRecord]) -> dict[str, Any]:
         "tool_calls_mean": _mean(r.tool_calls for r in records),
         "reliability_score": score,
         "reliability_weights": weights,
+        "freshness_checked": len(checked),
+        "freshness": _mean(r.freshness_score for r in checked if r.freshness_score is not None),
+        "stale_answers": verdicts.get("stale", 0),
+        "stale_rate": _ratio(verdicts.get("stale", 0), len(checked)),
+        "freshness_verdicts": {v: verdicts.get(v, 0) for v in FRESHNESS_VERDICTS},
     }
 
 

@@ -14,7 +14,7 @@ from app.agents.tools import TOOLS
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.mode import Mode, get_mode, require_admin
-from app.models import Agent, TaskExecution
+from app.models import Agent, FreshnessCheck, TaskExecution
 from app.schemas import (
     AgentCreate,
     AgentOut,
@@ -50,6 +50,12 @@ def execution_detail(db: Session, execution: TaskExecution) -> ExecutionDetailOu
             "agent_name": agent.name if agent else "(deleted)",
             "model": agent.model if agent else "",
             "trace": execution.trace,
+            "freshness_check_id": db.scalar(
+                select(FreshnessCheck.id)
+                .where(FreshnessCheck.execution_id == execution.id)
+                .order_by(FreshnessCheck.id.desc())
+                .limit(1)
+            ),
         }
     )
 

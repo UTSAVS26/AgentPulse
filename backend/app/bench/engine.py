@@ -10,6 +10,10 @@ Execution model
 * Each execution is committed as soon as it finishes, so a crash or cancel never loses finished work.
 * A failure inside one execution (even a bug) is recorded on that execution and the run continues.
 * Fault injection is seeded from ``(run, agent, task, repeat)`` so a run is reproducible.
+* Answers to **time-sensitive** tasks are checked by the stale-answer detector (unless the run
+  disables it). One checker per run caches by answer and claim, so the many identical answers a
+  benchmark produces cost one Tavily search, not dozens. The checker's own LLM/search usage is
+  platform overhead: it is not added to the agent's tokens or cost.
 """
 
 from __future__ import annotations
@@ -33,6 +37,8 @@ from app.bench.scoring import ScoreResult, render_expected, score_judge, score_o
 from app.clients import LLMClient, MockLLMClient, SearchClient, clients_for
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker
+from app.freshness.checker import FreshnessChecker
+from app.freshness.store import save_check
 from app.models import Agent, BenchmarkRun, Task, TaskExecution, TaskSuite
 
 log = logging.getLogger(__name__)
@@ -62,6 +68,7 @@ class _RunContext:
     search: SearchClient
     live: bool
     prices: PriceBook
+    freshness: FreshnessChecker | None = None
 
 
 class BenchmarkEngine:
@@ -94,6 +101,7 @@ class BenchmarkEngine:
         repeats: int,
         fault_rate: float,
         live: bool = False,
+        check_freshness: bool = True,
     ) -> BenchmarkRun:
         suite = db.get(TaskSuite, suite_id)
         if suite is None:
@@ -116,6 +124,7 @@ class BenchmarkEngine:
             repeats=repeats,
             fault_rate=fault_rate,
             mock_mode=not live,
+            check_freshness=check_freshness,
             status="pending",
             progress_total=total,
         )
@@ -161,6 +170,7 @@ class BenchmarkEngine:
                     "scorer": t.scorer,
                     "tolerance": t.tolerance,
                     "stale_answer": t.stale_answer,
+                    "time_sensitive": t.time_sensitive,
                 }
                 for t in db.get(TaskSuite, run.suite_id).tasks
             ]
@@ -169,9 +179,21 @@ class BenchmarkEngine:
                 for a in db.scalars(select(Agent).where(Agent.id.in_(run.agent_ids)))
             ]
             repeats, fault_rate, live = run.repeats, run.fault_rate, not run.mock_mode
+            check_freshness = run.check_freshness is not False
 
         llm, search = self.clients(live)
-        ctx = _RunContext(llm=llm, search=search, live=live, prices=self.prices[live])
+        freshness = None
+        if check_freshness and any(t["time_sensitive"] for t in tasks):
+            freshness = FreshnessChecker(
+                llm,
+                search,
+                self.settings.freshness_models,
+                search_depth=self.settings.freshness_search_depth,
+                cache=True,
+                workers=2,
+                retry_backoff_s=0.5 if live else 0.0,
+            )
+        ctx = _RunContext(llm=llm, search=search, live=live, prices=self.prices[live], freshness=freshness)
         self._prime_mock(ctx.llm, tasks)
         try:
             with ThreadPoolExecutor(
@@ -280,6 +302,7 @@ class BenchmarkEngine:
                 execution.score_detail = f"{sr.detail} · price: {price_source}"
                 execution.cost_usd = cost
                 execution.recovered = result.had_failures and sr.passed
+                self._check_freshness(ctx, db, execution, task)
             except Exception as exc:  # a bug must not kill the whole run
                 db.rollback()
                 log.exception("Execution failed (run %s, agent %s, task %s)", run_id, agent_id, task["id"])
@@ -303,6 +326,30 @@ class BenchmarkEngine:
                 .values(progress_done=BenchmarkRun.progress_done + 1)
             )
             db.commit()
+
+    @staticmethod
+    def _check_freshness(ctx: _RunContext, db: Session, execution: TaskExecution, task: dict) -> None:
+        """Stale-answer check of a time-sensitive task's answer. Never fails the execution."""
+        if not (ctx.freshness and task["time_sensitive"] and execution.status == "ok"):
+            return
+        if not (execution.output or "").strip():
+            return
+        try:
+            result = ctx.freshness.check(execution.output, question=task["prompt"])
+        except Exception:  # pragma: no cover - check() is designed not to raise
+            log.exception("Freshness check failed for execution %s", execution.id)
+            return
+        save_check(
+            db,
+            result,
+            input_text=execution.output,
+            question=task["prompt"],
+            execution_id=execution.id,
+            mock_mode=not ctx.live,
+            source="benchmark",
+        )
+        execution.freshness_score = result.freshness_score
+        execution.freshness_verdict = result.verdict
 
 
 def mark_interrupted_runs(db: Session) -> int:

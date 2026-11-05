@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import api
-from ui import RUN_STATUS, leaderboard_frame, page_setup, pct, run_label, show_error
+from ui import ANSWER_VERDICTS, RUN_STATUS, leaderboard_frame, page_setup, pct, run_label, show_error
 
 health = page_setup("Run Benchmark", "🏁")
 st.title("🏁 Run Benchmark")
@@ -70,6 +70,15 @@ with st.container(border=True):
         help="Probability that each tool call fails (reliability test).",
     )
 
+    check_freshness = True
+    if suite["time_sensitive_count"]:
+        check_freshness = st.checkbox(
+            "🕰️ Check answers to time-sensitive tasks for staleness",
+            value=True,
+            help="Runs the stale-answer detector (claim extraction + Tavily search + LLM verdict) on every "
+            "answer to a ⏰ task. Identical answers are checked once per run. In live mode this uses Tavily "
+            "credits (1 per distinct claim).",
+        )
     selected = [agent_by_label[c] for c in chosen]
     total = suite["task_count"] * len(selected) * repeats
     st.markdown(
@@ -89,6 +98,7 @@ with st.container(border=True):
                 "agent_ids": [a["id"] for a in selected],
                 "repeats": repeats,
                 "fault_rate": fault_rate,
+                "check_freshness": check_freshness,
             },
         )
         if not show_error(err):
@@ -172,6 +182,7 @@ if not polling:
                         "Scoring": (e["score_detail"] or "").split(" · price:")[0],
                         "Faults": e["faults_injected"],
                         "Recovered": "🛡️" if e["recovered"] else "",
+                        "Freshness": ANSWER_VERDICTS.get(e.get("freshness_verdict") or "", ""),
                         "Latency (s)": round(e["latency_ms"] / 1000, 2),
                         "Tokens": e["prompt_tokens"] + e["completion_tokens"],
                     }

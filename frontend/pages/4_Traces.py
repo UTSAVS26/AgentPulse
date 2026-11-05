@@ -6,7 +6,15 @@ import streamlit as st
 
 import api
 import charts
-from ui import execution_summary, page_setup, render_trace, run_label, show_error
+from ui import (
+    ANSWER_VERDICTS,
+    DETECTOR_PAGE,
+    execution_summary,
+    page_setup,
+    render_trace,
+    run_label,
+    show_error,
+)
 
 page_setup("Traces", "🔍")
 st.title("🔍 Execution traces")
@@ -127,6 +135,13 @@ with right:
             detail, _, price = ex["score_detail"].partition(" · price: ")
             st.caption(f"Scoring: {detail}" + (f" · pricing source: {price}" if price else ""))
     st.markdown(f"**Cost:** ${ex['cost_usd']:.6f}" if ex["cost_usd"] else "**Cost:** $0 (or not priced)")
+    if ex.get("freshness_verdict"):
+        label = ANSWER_VERDICTS.get(ex["freshness_verdict"], ex["freshness_verdict"])
+        st.markdown(
+            f"**Freshness:** {label} · [claims & sources ↗]({DETECTOR_PAGE}?check={ex['freshness_check_id']})"
+        )
+    elif ex["output"]:
+        st.caption(f"[Check this answer for stale claims ↗]({DETECTOR_PAGE}?execution={ex['id']})")
     st.caption(f"Share this trace: add `?execution={ex['id']}` to the Traces page URL.")
 
 execution_summary(ex)

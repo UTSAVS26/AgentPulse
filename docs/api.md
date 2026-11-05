@@ -117,6 +117,46 @@ Illustrative `/runs/{id}/metrics` leaderboard row (abridged):
  "reliability_weights": {"accuracy": 0.727, "stability": 0.273}}
 ```
 
+`POST /runs` also takes `check_freshness` (default `true`): run the stale-answer detector on answers to
+time-sensitive tasks. Executions then carry `freshness_score` and `freshness_verdict`, and the leaderboard rows
+carry `freshness`, `freshness_checked`, `stale_answers`, `stale_rate` and `freshness_verdicts`.
+
+## Freshness
+
+Stale-answer detection: claims → Tavily → verdict. How it works: [stale-answer-detection.md](stale-answer-detection.md).
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/freshness/check` | Check `text` (with an optional `question`) **or** an `execution_id` → `201` with claims, sources and score. `search_depth`: `advanced` (default) or `basic`. Exactly one of `text`/`execution_id` (`422` otherwise); `404` for an unknown execution. Live mode takes 5–20 s. |
+| GET | `/freshness/checks?limit=30&execution_id=&manual_only=` | Recent checks, newest first, without claims. `manual_only=true` hides the automatic checks from benchmark runs. |
+| GET | `/freshness/checks/{id}` | One check with every claim and its sources |
+| DELETE | `/freshness/checks/{id}` | Delete a check (needs the access code on the public demo) |
+
+```bash
+curl -s localhost:8000/freshness/check -H 'content-type: application/json'   -d '{"text": "The current UK PM is Rishi Sunak. Water boils at 100 °C at sea level."}'
+# an agent's answer (its prompt becomes the question):
+curl -s localhost:8000/freshness/check -H 'content-type: application/json' -d '{"execution_id": 42}'
+```
+
+Response (abridged, live):
+
+```json
+{"id": 7, "verdict": "stale", "freshness_score": 0.0, "extraction": "llm", "source": "text",
+ "counts": {"current": 0, "outdated": 1, "contradicted": 0, "unverifiable": 0, "not_time_sensitive": 1},
+ "claims": [
+   {"text": "Rishi Sunak is the current Prime Minister of the United Kingdom.", "time_sensitive": true,
+    "query": "current UK prime minister", "topic": "news", "verdict": "outdated", "confidence": 0.98,
+    "correction": "Andy Burnham is the current Prime Minister of the United Kingdom.",
+    "explanation": "Multiple sources from July 2026 report that Andy Burnham succeeded Keir Starmer…",
+    "method": "llm",
+    "sources": [{"title": "Andy Burnham succeeds Keir Starmer as the U.K.'s 7th prime minister…",
+                 "url": "https://www.npr.org/…", "published_date": "2026-07-20", "snippet": "…"}]},
+   {"text": "Water boils at 100 °C at sea level.", "time_sensitive": false,
+    "verdict": "not_time_sensitive", "method": "skipped", "sources": []}]}
+```
+
+`GET /executions/{id}` includes `freshness_verdict` and `freshness_check_id` (the latest check of that answer).
+
 ## Coming in later phases
 
-Stale-answer detection (Phase 5) and reports (Phase 6).
+Reports (Phase 6).

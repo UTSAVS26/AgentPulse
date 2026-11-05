@@ -48,6 +48,22 @@ With 1 repeat and no failures, only accuracy and stability remain:
 
 Leaderboard order: reliability score, then accuracy (descending). Agents with no executions yet appear last.
 
+## Freshness
+
+Answers to ⏰ time-sensitive tasks are checked by the [stale-answer detector](stale-answer-detection.md)
+(unless the run sets `check_freshness: false`). Per agent:
+
+| Metric | Formula | Notes |
+|---|---|---|
+| `freshness_checked` | answers the detector checked | Only `ok` answers to time-sensitive tasks |
+| **Freshness** | mean of per-answer freshness scores | Per answer: current ÷ (current + outdated + contradicted) over its time-sensitive claims. Answers with no decisive claim are left out. |
+| `stale_answers` | answers whose verdict is `stale` (≥ 1 outdated claim) | |
+| Stale rate | stale answers ÷ answers checked | |
+| `freshness_verdicts` | count per answer verdict: `fresh`, `stale`, `wrong`, `unverified`, `timeless`, `no_claims` | Powers the Freshness chart on Compare |
+
+Freshness is reported **next to** the reliability score, not inside it, so the reliability weights stay
+comparable across suites with and without time-sensitive tasks.
+
 ## Task matrix
 
 `task_matrix` gives, for every task, each agent's pass rate across repeats (`null` if the agent hasn't

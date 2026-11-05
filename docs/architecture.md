@@ -28,10 +28,10 @@
 
 | Component | Responsibility | Status |
 |---|---|---|
-| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark, Compare, Traces (`ui.py` helpers, `charts.py` Plotly builders) |
-| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs APIs; agent runtime; benchmark engine (scoring, pricing, metrics) |
+| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark, Compare, Traces, Stale-Answer Detector (`ui.py` helpers, `charts.py` Plotly builders) |
+| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs, freshness APIs; agent runtime; benchmark engine (scoring, pricing, metrics); stale-answer detector |
 | **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
-| **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer verifier. | Client ready, verified live |
+| **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer detector. | Verified live (agents and detector) |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
 
 ## Mock and live mode per request
@@ -55,13 +55,28 @@ backend/app/clients/
   llm.py          LLMClient protocol, LLMResponse/ToolCall/LLMError, BifrostClient (httpx)
   mock_llm.py     MockLLMClient: per-model profiles, tool use, recovery, answer key, responders
   search.py       SearchClient protocol, SearchResponse/SearchResult/SearchError, TavilySearchClient
-  mock_search.py  MockSearchClient: dated demo corpus + generic fallback
-  __init__.py     get_llm_client() / get_search_client(): chosen once per process by MOCK_MODE
+  mock_search.py  MockSearchClient: dated demo corpus (current + stale answers per topic) + generic fallback
+  mock_freshness.py  mock replies to the stale-answer detector's extraction/judge prompts
+  __init__.py     clients_for(live) -> (LLM, search) pair; both sets are cached singletons
 ```
 
 The rest of the code depends only on the `LLMClient` / `SearchClient` protocols, so mock and
-real mode run identical code paths above the client layer. FastAPI routes receive clients through
-`Depends(get_llm_client)`, which tests override. Gateway details are in [bifrost.md](bifrost.md).
+real mode run identical code paths above the client layer. FastAPI routes receive the pair for the
+request's mode through `Depends(get_mode)` (`app/mode.py`). Gateway details are in [bifrost.md](bifrost.md).
+
+### Stale-answer detector
+
+```
+backend/app/freshness/
+  prompts.py     extraction and judge prompts (JSON in, JSON out)
+  heuristics.py  rule-based claim extraction and time-sensitivity signals (fallback + override)
+  checker.py     FreshnessChecker: extract -> clock check or Tavily search -> LLM verdict -> score;
+                 model fallback with rate-limit cooldowns; per-run cache; never raises
+  store.py       persist checks/claims, build API responses
+```
+
+Used by `POST /freshness/check` (`routers/freshness.py`) and by the benchmark engine on answers to time-sensitive
+tasks. Details: [stale-answer-detection.md](stale-answer-detection.md).
 
 ## Data model
 
@@ -84,11 +99,11 @@ task_suites ─< tasks│
 | `agents` | An agent = model + prompt + tools + step budget | `name` (unique), `model` (Bifrost id), `system_prompt`, `tools` (JSON list), `temperature`, `max_steps` |
 | `task_suites` | Named benchmark suite | `name` (unique), `description` |
 | `tasks` | One benchmark question | `key`, `prompt`, `expected`, `scorer` (`exact\|contains\|numeric\|regex\|judge`), `tolerance`, `category`, `time_sensitive` |
-| `benchmark_runs` | One run of a suite × agents × repeats | `agent_ids`, `repeats`, `fault_rate`, `mock_mode`, `status`, `progress_done/total`, timestamps |
-| `task_executions` | One agent attempting one task once | `output`, `status` (`ok\|error\|max_steps`), `score`, `passed`, token counts, `cost_usd`, `latency_ms`, `steps`, `tool_calls`, `faults_injected`, `retries`, `recovered`, `freshness_score`. `run_id` is NULL for ad-hoc "try agent" runs. |
+| `benchmark_runs` | One run of a suite × agents × repeats | `agent_ids`, `repeats`, `fault_rate`, `mock_mode`, `check_freshness`, `status`, `progress_done/total`, timestamps |
+| `task_executions` | One agent attempting one task once | `output`, `status` (`ok\|error\|max_steps`), `score`, `passed`, token counts, `cost_usd`, `latency_ms`, `steps`, `tool_calls`, `faults_injected`, `retries`, `recovered`, `freshness_score`, `freshness_verdict`. `run_id` is NULL for ad-hoc "try agent" runs. |
 | `trace_steps` | Ordered steps of an execution | `idx`, `type` (`llm_call\|tool_call\|tool_result\|error\|retry\|final`), `payload` (JSON), tokens, `latency_ms` |
-| `freshness_checks` | One stale-answer analysis | `input_text`, optional `execution_id`, `freshness_score` |
-| `claims` | One extracted claim | `text`, `time_sensitive`, `query`, `sources` (JSON: url, title, published_date), `verdict` (`current\|outdated\|contradicted\|unverifiable\|not_time_sensitive`), `confidence`, `explanation` |
+| `freshness_checks` | One stale-answer analysis | `input_text`, `question`, optional `execution_id`, `freshness_score`, `verdict` (`fresh\|stale\|wrong\|unverified\|timeless\|no_claims`), `extraction`, `mock_mode`, `source` (`text\|execution\|benchmark`), `latency_ms` |
+| `claims` | One extracted claim | `text`, `time_sensitive`, `query`, `sources` (JSON: url, title, published_date), `verdict` (`current\|outdated\|contradicted\|unverifiable\|not_time_sensitive`), `confidence`, `explanation`, `correction`, `topic`, `signals`, `method` |
 
 Schema changes are additive. `add_missing_columns()` adds new nullable columns to existing databases on startup, so upgrading never requires wiping data.
 

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agents.tools import TOOLS
 from app.bench.scoring import SCORERS
@@ -108,6 +108,9 @@ class ExecutionOut(BaseModel):
     score_detail: str | None = None
     error: str | None
     freshness_score: float | None
+    freshness_verdict: str | None = Field(
+        default=None, description="Stale-answer check of this answer: fresh | stale | wrong | unverified..."
+    )
     created_at: datetime
 
 
@@ -115,6 +118,7 @@ class ExecutionDetailOut(ExecutionOut):
     agent_name: str
     model: str
     trace: list[TraceStepOut]
+    freshness_check_id: int | None = Field(default=None, description="Latest stale-answer check, if any.")
 
 
 # ------------------------------------------------------------------------------------ suites
@@ -178,6 +182,10 @@ class RunCreate(BaseModel):
     agent_ids: list[int] = Field(min_length=1)
     repeats: int = Field(default=1, ge=1, le=10, description="Times each agent attempts each task.")
     fault_rate: float = Field(default=0.0, ge=0.0, le=1.0, description="Per-tool-call fault probability.")
+    check_freshness: bool = Field(
+        default=True,
+        description="Run the stale-answer detector (Tavily) on answers to time-sensitive tasks.",
+    )
 
 
 class RunOut(BaseModel):
@@ -191,6 +199,7 @@ class RunOut(BaseModel):
     repeats: int
     fault_rate: float
     mock_mode: bool
+    check_freshness: bool | None = None
     status: str
     progress_done: int
     progress_total: int
@@ -205,3 +214,79 @@ class RunExecutionOut(ExecutionOut):
     agent_name: str
     task_key: str
     category: str
+
+
+# ------------------------------------------------------------------------------------ freshness
+class FreshnessCheckRequest(BaseModel):
+    """Check either a pasted text (optionally with the question it answers) or an execution's answer."""
+
+    text: str | None = Field(
+        default=None,
+        max_length=6000,
+        examples=["The current UK Prime Minister is Rishi Sunak. Water boils at 100 °C at sea level."],
+    )
+    question: str | None = Field(
+        default=None, max_length=2000, description="The question that `text` answers."
+    )
+    execution_id: int | None = Field(
+        default=None, description="Check this execution's answer (its prompt is used as the question)."
+    )
+    search_depth: Literal["basic", "advanced"] = Field(
+        default="advanced", description="Tavily search depth (advanced = better recall, 2 credits)."
+    )
+
+    @model_validator(mode="after")
+    def _one_source(self) -> FreshnessCheckRequest:
+        has_text = bool(self.text and self.text.strip())
+        if has_text == (self.execution_id is not None):
+            raise ValueError("provide exactly one of `text` or `execution_id`")
+        return self
+
+
+class SourceOut(BaseModel):
+    title: str = ""
+    url: str = ""
+    published_date: str | None = None
+    snippet: str | None = None
+
+
+class ClaimOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    text: str
+    time_sensitive: bool
+    query: str | None
+    topic: str | None = None
+    signals: list[str] | None = None
+    verdict: str = Field(description="current | outdated | contradicted | unverifiable | not_time_sensitive")
+    confidence: float
+    explanation: str
+    correction: str | None = None
+    method: str | None = Field(
+        default=None, description="llm | clock | skipped | search-error | no-sources | llm-error"
+    )
+    sources: list[SourceOut]
+
+
+class FreshnessCheckSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    execution_id: int | None
+    input_text: str
+    question: str | None
+    freshness_score: float | None = Field(
+        description="current ÷ (current + outdated + contradicted) over time-sensitive claims; null if none."
+    )
+    verdict: str | None = Field(description="fresh | stale | wrong | unverified | timeless | no_claims")
+    extraction: str | None
+    mock_mode: bool | None
+    source: str | None = Field(default=None, description="text | execution | benchmark (automatic)")
+    latency_ms: float | None
+    created_at: datetime
+    counts: dict[str, int] = Field(default_factory=dict, description="Claims per verdict.")
+
+
+class FreshnessCheckOut(FreshnessCheckSummary):
+    claims: list[ClaimOut]

@@ -19,6 +19,24 @@ STEP_ICONS = {
 }
 STATUS_LABELS = {"ok": "✅ ok", "error": "❌ error", "max_steps": "⏱️ max steps"}
 
+# Stale-answer detector. Claim verdicts and whole-answer verdicts, always icon + label.
+CLAIM_VERDICTS = {
+    "current": "✅ Current",
+    "outdated": "⚠️ Outdated",
+    "contradicted": "❌ Contradicted",
+    "unverifiable": "❔ Unverifiable",
+    "not_time_sensitive": "➖ Timeless",
+}
+ANSWER_VERDICTS = {
+    "fresh": "✅ fresh",
+    "stale": "⚠️ stale",
+    "wrong": "❌ wrong",
+    "unverified": "❔ unverified",
+    "timeless": "➖ timeless",
+    "no_claims": "∅ no claims",
+}
+DETECTOR_PAGE = "Stale_Answer_Detector"
+
 
 def page_setup(title: str, icon: str = "📈") -> dict | None:
     """Configure the page and render the sidebar status. Returns the health payload (or None)."""
@@ -187,6 +205,7 @@ def run_label(r: dict) -> str:
 def leaderboard_frame(board: list[dict]):
     import pandas as pd
 
+    freshness = any(r.get("freshness_checked") for r in board)
     return pd.DataFrame(
         [
             {
@@ -202,6 +221,11 @@ def leaderboard_frame(board: list[dict]):
                 "p95 latency": secs(r["latency_ms_p95"]),
                 "Avg tokens": "–" if r["tokens_mean"] is None else f"{r['tokens_mean']:,.0f}",
                 "Total cost": usd(r["cost_usd_total"]),
+                **(
+                    {"Freshness": pct(r.get("freshness")), "Stale answers": r.get("stale_answers", 0)}
+                    if freshness
+                    else {}
+                ),
                 "Done": r["executions"],
             }
             for r in board

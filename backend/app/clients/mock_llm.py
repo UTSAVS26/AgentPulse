@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.clients.llm import LLMError, LLMResponse, ToolCall
+from app.clients.mock_freshness import freshness_responder
 
 Responder = Callable[[str, list[dict[str, Any]], random.Random], str | None]
 
@@ -113,7 +114,8 @@ class MockLLMClient:
         self.latency_scale = latency_scale
         self.answer_key = {_normalize(k): v for k, v in (answer_key or {}).items()}
         self.stale_key: dict[str, str] = {}
-        self.responders: list[Responder] = list(responders or [])
+        # The stale-answer detector's prompts are always answered (see mock_freshness).
+        self.responders: list[Responder] = [freshness_responder, *(responders or [])]
         self.failure_rate_override = failure_rate_override
         self._calls: dict[str, int] = {}
         self._lock = threading.Lock()

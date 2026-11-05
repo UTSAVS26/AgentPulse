@@ -21,11 +21,25 @@ class CorpusEntry:
     keywords: tuple[str, ...]
     answer: str
     results: tuple[tuple[str, str, str], ...]  # (title, content, published_date)
+    current_terms: tuple[str, ...] = ()
+    """Terms that make a claim on this topic *current* (used by the mock fact-checker)."""
+    stale_terms: tuple[str, ...] = ()
+    """Terms that make a claim *outdated*: what an older model would say."""
+
+    def matches(self, text: str) -> bool:
+        lower = text.lower()
+        return any(k in lower for k in self.keywords)
 
 
 CORPUS: tuple[CorpusEntry, ...] = (
     CorpusEntry(
-        keywords=("uk prime minister", "prime minister of the uk", "british prime minister", "uk pm"),
+        keywords=(
+            "uk prime minister",
+            "prime minister of the uk",
+            "prime minister of the united kingdom",
+            "british prime minister",
+            "uk pm",
+        ),
         answer="Andy Burnham became UK Prime Minister in July 2026, succeeding Keir Starmer.",
         results=(
             (
@@ -41,11 +55,63 @@ CORPUS: tuple[CorpusEntry, ...] = (
                 "2026-07-20",
             ),
         ),
+        current_terms=("burnham",),
+        stale_terms=("starmer", "sunak", "truss", "boris johnson", "theresa may"),
+    ),
+    CorpusEntry(
+        keywords=("world cup",),
+        answer="Spain won the 2026 FIFA World Cup, the most recent edition.",
+        results=(
+            (
+                "Spain crowned 2026 FIFA World Cup champions",
+                "Spain won the 2026 FIFA World Cup final on 19 July 2026, their second world title.",
+                "2026-07-19",
+            ),
+            (
+                "Argentina win the 2022 World Cup in Qatar",
+                "Argentina beat France on penalties to win the 2022 FIFA World Cup in Qatar.",
+                "2022-12-18",
+            ),
+        ),
+        current_terms=("spain",),
+        stale_terms=("argentina", "france", "germany"),
+    ),
+    CorpusEntry(
+        keywords=("python",),
+        answer="Python 3.15 is the latest stable minor version, released in October 2026.",
+        results=(
+            (
+                "Python 3.15.0 is now available",
+                "The Python Software Foundation released Python 3.15.0, the newest stable version.",
+                "2026-10-01",
+            ),
+            (
+                "What's new in Python 3.13",
+                "Python 3.13 was released in October 2024 with an improved interactive interpreter.",
+                "2024-10-07",
+            ),
+        ),
+        current_terms=("3.15",),
+        stale_terms=("3.14", "3.13", "3.12", "3.11"),
+    ),
+    CorpusEntry(
+        keywords=("secretary-general", "secretary general"),
+        answer="António Guterres is the UN Secretary-General; his second term runs until 31 December 2026.",
+        results=(
+            (
+                "UN Secretary-General António Guterres addresses the General Assembly",
+                "Secretary-General António Guterres opened the general debate of the 81st session.",
+                "2026-09-22",
+            ),
+        ),
+        current_terms=("guterres",),
+        stale_terms=("ban ki-moon", "ban ki moon", "kofi annan"),
     ),
     CorpusEntry(
         keywords=("capital of france",),
         answer="Paris is the capital of France.",
         results=(("Paris - capital of France", "Paris is the capital and largest city of France.", ""),),
+        current_terms=("paris",),
     ),
     CorpusEntry(
         keywords=("tallest building",),
@@ -57,13 +123,20 @@ CORPUS: tuple[CorpusEntry, ...] = (
                 "2026-03-02",
             ),
         ),
+        current_terms=("burj khalifa",),
+        stale_terms=("taipei 101", "petronas", "willis tower", "sears tower"),
     ),
     CorpusEntry(
-        keywords=("boiling point", "water boil"),
+        keywords=("boiling point", "water boil", "water boils"),
         answer="Water boils at 100 °C at sea level.",
         results=(("Boiling point of water", "At standard atmospheric pressure water boils at 100 °C.", ""),),
     ),
 )
+
+
+def find_entry(text: str) -> CorpusEntry | None:
+    """The corpus entry whose keywords appear in ``text`` (first match), if any."""
+    return next((e for e in CORPUS if e.matches(text)), None)
 
 
 class MockSearchClient:
@@ -92,8 +165,7 @@ class MockSearchClient:
         if rng.random() < self.failure_rate:
             raise SearchError("simulated Tavily outage (mock)", retryable=True, status_code=503)
 
-        lower = query.lower()
-        entry = next((e for e in CORPUS if any(k in lower for k in e.keywords)), None)
+        entry = find_entry(query)
         if entry:
             results = [
                 SearchResult(

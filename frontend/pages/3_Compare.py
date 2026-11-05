@@ -7,7 +7,17 @@ import streamlit as st
 
 import api
 import charts
-from ui import leaderboard_frame, page_setup, pct, run_label, secs, show_error, usd
+from ui import (
+    ANSWER_VERDICTS,
+    DETECTOR_PAGE,
+    leaderboard_frame,
+    page_setup,
+    pct,
+    run_label,
+    secs,
+    show_error,
+    usd,
+)
 
 page_setup("Compare", "📊")
 st.title("📊 Compare agents")
@@ -63,9 +73,10 @@ c4.metric(
 st.markdown("#### Leaderboard")
 st.dataframe(leaderboard_frame(data["leaderboard"]), hide_index=True, use_container_width=True)
 
-tab_overview, tab_cost, tab_tasks, tab_failures = st.tabs(
-    ["Overview", "Speed & cost", "Per task", "Failures & recovery"]
-)
+has_freshness = any(r.get("freshness_checked") for r in board)
+tab_names = ["Overview", "Speed & cost", "Per task", "Failures & recovery"]
+tabs = st.tabs(tab_names + (["🕰️ Freshness"] if has_freshness else []))
+tab_overview, tab_cost, tab_tasks, tab_failures = tabs[:4]
 CHART_CFG = {"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]}
 
 # ------------------------------------------------------------------------------------ overview
@@ -192,3 +203,55 @@ with tab_failures:
             )
         else:
             st.success("Every execution passed.")
+
+# ------------------------------------------------------------------------------------ freshness
+if has_freshness:
+    with tabs[4]:
+        st.caption(
+            "Answers to ⏰ time-sensitive tasks were checked by the **stale-answer detector**: claims "
+            "extracted, searched on Tavily and judged *current*, *outdated* or *contradicted*. Freshness is "
+            "reported next to, not inside, the reliability score. The detector's own LLM/search usage is not "
+            "added to the agents' cost."
+        )
+        fresh_board = [r for r in board if r.get("freshness_checked")]
+        cols = st.columns(len(fresh_board)) if len(fresh_board) <= 4 else None
+        for i, r in enumerate(fresh_board):
+            (cols[i] if cols else st).metric(
+                r["agent_name"],
+                pct(r["freshness"]),
+                f"{r['stale_answers']} stale of {r['freshness_checked']} checked",
+                delta_color="off",
+                help="Freshness = mean share of an answer's time-sensitive claims that are current.",
+            )
+        st.plotly_chart(charts.freshness_bars(board), use_container_width=True, config=CHART_CFG)
+
+        execs, err = api.get(f"/runs/{run_id}/executions", timeout=30)
+        if not show_error(err) and execs:
+            flagged = [e for e in execs if e.get("freshness_verdict") in ("stale", "wrong")]
+            st.markdown(f"#### Stale or wrong answers ({len(flagged)})")
+            if flagged:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "Check": f"{DETECTOR_PAGE}?execution={e['id']}",
+                                "Trace": f"Traces?execution={e['id']}",
+                                "Agent": e["agent_name"],
+                                "Task": e["task_key"],
+                                "Repeat": e["repeat_idx"] + 1,
+                                "Freshness": ANSWER_VERDICTS.get(e["freshness_verdict"], ""),
+                                "Answer": (e["output"] or "")[:160],
+                                "Passed": "✅" if e["passed"] else "❌",
+                            }
+                            for e in flagged
+                        ]
+                    ),
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "Check": st.column_config.LinkColumn("Sources", display_text="why ↗"),
+                        "Trace": st.column_config.LinkColumn("Trace", display_text="open ↗"),
+                    },
+                )
+            else:
+                st.success("No stale answers in this run.")

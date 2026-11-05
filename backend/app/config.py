@@ -35,6 +35,23 @@ class Settings(BaseSettings):
     judge_model: str = "groq/openai/gpt-oss-120b"
     """Model used by the `judge` scorer (live mode only)."""
 
+    freshness_model: str = "groq/openai/gpt-oss-120b"
+    """Model that extracts claims and judges them against Tavily sources (stale-answer detector)."""
+
+    freshness_fallback_models: str = "groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b"
+    """Comma-separated models tried in order when the main one is rate-limited or failing
+    (each Groq model has its own daily token quota)."""
+
+    @property
+    def freshness_models(self) -> list[str]:
+        extra = [m.strip() for m in self.freshness_fallback_models.split(",") if m.strip()]
+        return list(dict.fromkeys([self.freshness_model, *extra]))
+
+    freshness_search_depth: str = "advanced"
+    """Tavily depth for the automatic checks during benchmark runs (advanced = 2 credits per search,
+    much better dated sources than basic). Results are cached per run, so each distinct claim is
+    searched once."""
+
     seed_on_startup: bool = True
     """Insert the default demo agents on startup (existing agents are never modified)."""
 

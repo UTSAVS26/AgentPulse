@@ -286,3 +286,94 @@ def test_phase4_pages_degrade_when_backend_down(monkeypatch):
         at.run()
         assert not at.exception, (page, [e.value for e in at.exception])
         assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error]), page
+
+
+# ------------------------------------------------------------------------------------ phase 5: freshness
+@pytest.fixture(scope="module")
+def freshness_run():
+    """A finished mock run of the time-sensitive suite (answers are freshness-checked)."""
+    suites = requests.get(f"{BACKEND}/suites", timeout=10).json()
+    current = next(s for s in suites if s["time_sensitive_count"])
+    run = requests.post(
+        f"{BACKEND}/runs",
+        json={"suite_id": current["id"], "agent_ids": [1, 4], "repeats": 2, "fault_rate": 0.0},
+        timeout=10,
+    ).json()
+    done = _wait_for_run(run["id"])
+    assert done["status"] == "done" and done["check_freshness"] is True, done
+    return done
+
+
+def test_detector_checks_example_text_and_shows_verdicts():
+    at = app("pages/5_Stale_Answer_Detector.py")
+    example = next(s for s in at.selectbox if s.label == "Load an example")
+    example.set_value("A stale answer").run()
+    assert "Rishi Sunak" in at.text_area(key="fc_text").value
+    next(b for b in at.button if b.label == "Check freshness").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Stale answer" in w.value for w in at.warning)
+    labels = {m.label: m.value for m in at.metric}
+    assert labels["Freshness"] == "0%" and labels["⚠️ Outdated"] == "2" and labels["➖ Timeless"] == "1"
+    text = " ".join(m.value for m in at.markdown)
+    assert "True today:" in text and "Sources** (newest first)" in text
+    assert at.query_params["check"]
+
+
+def test_detector_opens_a_check_from_its_link_and_lists_history():
+    check = requests.post(
+        f"{BACKEND}/freshness/check",
+        json={"text": "Andy Burnham is the current UK Prime Minister."},
+        timeout=60,
+    ).json()
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at.query_params["check"] = str(check["id"])
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.radio[0].value == "History"
+    assert any("Up to date" in s.value for s in at.success)
+    assert next(s for s in at.selectbox if s.label == "Check").value == check["id"]
+
+
+def test_detector_agent_answer_tab_shows_existing_check(freshness_run):
+    execs = requests.get(f"{BACKEND}/runs/{freshness_run['id']}/executions", timeout=10).json()
+    target = next(e for e in execs if e["freshness_verdict"] == "stale")
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at.query_params["execution"] = str(target["id"])
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.radio[0].value == "An agent's answer"
+    assert any("Already checked" in c.value for c in at.caption)
+    assert any("Stale answer" in w.value for w in at.warning)
+
+
+def test_compare_page_freshness_tab(freshness_run):
+    at = AppTest.from_file(str(FRONTEND / "pages/3_Compare.py"), default_timeout=TIMEOUT)
+    at.session_state["run_id"] = freshness_run["id"]
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    board = next(d.value for d in at.dataframe if "Reliability" in d.value.columns)
+    assert {"Freshness", "Stale answers"} <= set(board.columns)
+    titles = [c.proto.spec for c in _plotly_charts(at)]
+    assert any("Freshness of answers" in t for t in titles)
+    flagged = next(d.value for d in at.dataframe if "Check" in d.value.columns)
+    assert len(flagged) and all(v.startswith("Stale_Answer_Detector?execution=") for v in flagged["Check"])
+
+
+def test_traces_page_links_to_freshness_check(freshness_run):
+    execs = requests.get(f"{BACKEND}/runs/{freshness_run['id']}/executions", timeout=10).json()
+    target = next(e for e in execs if e["freshness_verdict"])
+    at = AppTest.from_file(str(FRONTEND / "pages/4_Traces.py"), default_timeout=TIMEOUT)
+    at.query_params["execution"] = str(target["id"])
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any(m.value.startswith("**Freshness:**") and "?check=" in m.value for m in at.markdown)
+
+
+def test_detector_degrades_when_backend_down(monkeypatch):
+    import api
+
+    monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])

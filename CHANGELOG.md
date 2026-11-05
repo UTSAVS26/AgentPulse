@@ -2,6 +2,50 @@
 
 All notable changes per build phase.
 
+## [Phase 5] Stale-answer detection with live Tavily verification
+
+### Added
+- **Stale-answer detector** (`backend/app/freshness/`):
+  - An LLM extracts atomic claims, flags the time-sensitive ones and writes a neutral search query for each.
+  - Each time-sensitive claim is searched on Tavily (dated sources).
+  - An LLM judge returns `current`, `outdated`, `contradicted` or `unverifiable`, with confidence, an explanation and what is true today.
+  - Claims about today's date and year are checked against the clock. Timeless claims are not searched.
+  - Freshness score = current ÷ decisive claims. There is also an overall verdict per text: fresh, stale, wrong, unverified, timeless or no claims.
+- **API**: `POST /freshness/check` (a text with an optional question, or an `execution_id`), `GET /freshness/checks[/{id}]`, `DELETE /freshness/checks/{id}`. `GET /executions/{id}` gains `freshness_verdict` and `freshness_check_id`.
+- **Benchmarks**: answers to ⏰ time-sensitive tasks are checked automatically (`check_freshness`, on by default).
+  - One cached checker per run, so identical answers and claims are verified once.
+  - Per-agent metrics: `freshness`, `freshness_checked`, `stale_answers`, `stale_rate`, `freshness_verdicts`.
+  - Reported next to the reliability score, not inside it.
+- **🕰️ Stale-Answer Detector** page:
+  - Paste text (with examples), check an agent's answer, or browse history.
+  - Results: verdict banner, stat tiles, and per-claim cards with "true today", the explanation, the search query, and dated sources (newest first), plus a data table.
+  - Shareable `?check=` and `?execution=` links.
+- **Compare → 🕰️ Freshness** tab: per-agent freshness tiles, a 100%-stacked verdict chart (status colors with icon labels), and a table of every stale or wrong answer with *why ↗* and trace links.
+  - The leaderboard gains Freshness and Stale columns.
+  - Run Benchmark gains a staleness-check toggle and a Freshness column.
+  - Traces links to the check.
+- **Mock mode runs the same pipeline**: the mock LLM answers the extraction and judge prompts from a mock corpus that lists the current and stale answers per topic (UK PM, World Cup, latest Python, UN Secretary-General…).
+- **Robustness**: `check()` never raises.
+  - If extraction fails, rule-based extraction takes over.
+  - Tavily errors, missing sources and judge errors give `unverifiable` with the reason, and the sources are kept.
+  - **Model fallback** (`FRESHNESS_FALLBACK_MODELS`) with rate-limit cooldowns: a daily quota benches a model for an hour and per-minute limits are waited out.
+- Settings `FRESHNESS_MODEL`, `FRESHNESS_FALLBACK_MODELS` and `FRESHNESS_SEARCH_DEPTH` (default advanced) are forwarded by compose. `JUDGE_MODEL` is now forwarded too (it was documented but never reached the container).
+- Schema: new nullable columns, added to existing databases on startup. Verified on the local Postgres volume: 12 columns added, no data lost.
+- Tests: 49 backend freshness tests, 1 chart test and 6 page tests. The deploy-image smoke test gains a detector check (13 checks).
+- Docs: `docs/stale-answer-detection.md`, plus updates to the API, metrics, dashboard, architecture and setup docs.
+
+### Found in live testing (and fixed)
+- **Judge called a stale answer "contradicted"** ("Argentina won the latest World Cup"). The prompt now spells out that former holders are *outdated*, and the judge returns `was_true_before`. A contradicted claim that was true before becomes outdated.
+- **Groq free-tier quotas**: the benchmarked agents and the checker share per-model quotas (200k tokens per day, and per-minute input limits). Verdicts came back `unverifiable` until model fallback, cooldowns and per-minute waits were added. Quota planning for demos is in the docs.
+- **"What day is it?" answers** were rewritten by the extractor as timeless facts ("Nov 5, 2026 is a Thursday"). Date questions now go straight to the clock. Historical "which year…" questions are excluded.
+- **Basic search depth returned undated pages** (and a wrong "Python 3.10.22" summary), so automatic checks now default to advanced.
+
+### Verified live (Groq via Bifrost + Tavily, 2026-11-05)
+- Rishi Sunak as PM → outdated (NPR, Georgetown, The Hill, July–Nov 2026: Andy Burnham).
+- Argentina → outdated (Spain, July 2026). Python 3.13 → outdated (Python Insider, Oct 2026: 3.15). Elon Musk as PM → contradicted.
+- "Water boils at 100 °C" → timeless, not searched. "It is 2024" → outdated (clock).
+- Live benchmark on Current Events (2 agents): every answer got a verdict and the stale answers were flagged. Both agents answered Python 3.14 (out of date: 3.15 shipped in October 2026).
+
 ## [Phase 4] Comparison dashboard & trace viewer
 
 ### Added

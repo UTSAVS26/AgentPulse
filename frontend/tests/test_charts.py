@@ -181,3 +181,26 @@ def test_radar_hover_says_na_for_undefined_metrics():
     hover = dict(zip(fig.data[0].theta, fig.data[0].customdata, strict=False))
     assert hover["Recovery"].startswith("n/a") and hover["Accuracy"] == "n/a"
     assert hover["Stability"] == "100%"
+
+
+def test_freshness_bars_are_shares_with_counts_and_skip_unchecked_agents():
+    board = [
+        row(1, "A", freshness_checked=4, freshness_verdicts={"fresh": 2, "stale": 1, "timeless": 1}),
+        row(2, "B", freshness_checked=0, freshness_verdicts={}),
+        row(3, "C", freshness_checked=2, freshness_verdicts={"wrong": 1, "no_claims": 1}),
+    ]
+    fig = charts.freshness_bars(board)
+    by_name = {t.name: t for t in fig.data}
+    assert list(by_name) == [label for _, label, _ in charts.FRESHNESS_STYLE.values()]
+    assert list(by_name["✅ fresh"].y) == ["C", "A"]  # B has no checked answers; board order, top-down
+    assert list(by_name["✅ fresh"].x) == [0.0, 0.5]
+    assert list(by_name["∅ no claim / timeless"].customdata) == [1, 1]  # timeless folds into no-claims
+    assert list(by_name["⚠️ stale"].text) == ["", "1"]  # zero segments are unlabelled
+    for i in range(2):  # every agent's segments sum to 100%
+        assert sum(t.x[i] for t in fig.data) == pytest.approx(1.0)
+    assert fig.layout.barmode == "stack"
+    assert by_name["⚠️ stale"].marker.color == charts.STATUS["warning"]
+    assert charts.freshness_bars([]).data[0].y == ()
+    assert (
+        fig.layout.legend.traceorder == "normal"
+    )  # fresh → stale → wrong, not plotly's reversed stack order
