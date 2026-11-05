@@ -13,6 +13,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{(_TMP / 'test.db').as_posix()}"
 os.environ["MOCK_MODE"] = "true"
 os.environ["MOCK_LATENCY_SCALE"] = "0"
 os.environ["MOCK_SEED"] = "42"
+os.environ["SEED_ON_STARTUP"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

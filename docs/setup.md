@@ -23,7 +23,7 @@ cp .env.example .env
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Where Bifrost reaches Ollama on your host |
 | `TAVILY_API_KEY` | – | Live web search and claim verification. Get one at https://tavily.com |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `agentpulse` | Database credentials |
-| `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `60` / `20` | Outbound request timeouts |
+| `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `120` / `20` | Outbound request timeouts |
 
 Provider keys are read **only by Bifrost** (see `bifrost/config.json`, which uses `env.` references). The backend never sees them.
 
@@ -106,6 +106,14 @@ Models verified on 2026-11-05 (provider catalogs change; check `/v1/models` if o
 | `ollama/granite4:3b`, `ollama/qwen3.5:9b` | Local, cost $0 |
 
 Free OpenRouter models are rate-limited. A `429` means "retry later", not a configuration error.
+
+## Dashboard smoke tests
+
+With the stack running (`make up`, preferably in mock mode):
+
+```bash
+make ui-test    # renders Home and Agents with Streamlit AppTest: runs an agent, creates/deletes one, backend-down handling
+```
 
 ## Verifying all real integrations at once
 

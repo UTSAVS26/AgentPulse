@@ -16,7 +16,7 @@ MODEL ?= groq/openai/gpt-oss-20b
 
 .DEFAULT_GOAL := help
 .PHONY: help setup env up up-live down reset restart build logs ps health ollama-test llm-test models live-check db-tables \
-        test lint format check
+        test ui-test lint format check
 
 help:
 	$(info AgentPulse - available commands)
@@ -45,6 +45,7 @@ help:
 	$(info     make test         Run backend tests)
 	$(info     make lint         Ruff lint + format check)
 	$(info     make format       Auto-fix lint issues and format code)
+	$(info     make ui-test      Render dashboard pages against the running stack (needs make up))
 	$(info     make check        lint + test (run before every commit))
 	@:
 
@@ -116,5 +117,8 @@ lint:
 format:
 	$(PY) -m ruff check --fix .
 	$(PY) -m ruff format .
+
+ui-test:
+	$(PY) -m pytest frontend -q
 
 check: lint test

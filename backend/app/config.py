@@ -24,9 +24,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://agentpulse:agentpulse@localhost:5432/agentpulse"
 
-    llm_timeout_s: float = 60.0
+    llm_timeout_s: float = 120.0
     search_timeout_s: float = 20.0
     health_timeout_s: float = 3.0
+
+    seed_on_startup: bool = True
+    """Insert the default demo agents on startup (existing agents are never modified)."""
 
     mock_seed: int = 42
     """Seed for the mock LLM/search so demo runs are reproducible."""

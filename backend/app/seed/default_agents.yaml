@@ -1,0 +1,70 @@
+# Default agents seeded on first start (existing names are never overwritten).
+# Every model below was verified to support tool calling through Bifrost on 2026-11-05.
+# Model ids: `provider/model` as listed by `make models`.
+
+agents:
+  - name: GPT-OSS 20B · tools
+    description: Groq-hosted open-weight model with web search, calculator and date tools.
+    model: groq/openai/gpt-oss-20b
+    tools: [web_search, calculator, current_date]
+    temperature: 0.0
+    max_steps: 6
+    system_prompt: >-
+      You are a precise research assistant. Use web_search for anything that may have changed
+      recently, calculator for any arithmetic, and current_date when the date matters.
+      If a tool fails, retry once or try a different approach. Answer concisely and put the
+      final answer in the last sentence.
+
+  - name: GPT-OSS 120B · tools
+    description: Larger Groq-hosted model, same tools and prompt as the 20B agent.
+    model: groq/openai/gpt-oss-120b
+    tools: [web_search, calculator, current_date]
+    temperature: 0.0
+    max_steps: 6
+    system_prompt: >-
+      You are a precise research assistant. Use web_search for anything that may have changed
+      recently, calculator for any arithmetic, and current_date when the date matters.
+      If a tool fails, retry once or try a different approach. Answer concisely and put the
+      final answer in the last sentence.
+
+  - name: Qwen3.8 27B · tools
+    description: Fast Groq-hosted Qwen model with tools.
+    model: groq/qwen/qwen3.8-27b
+    tools: [web_search, calculator, current_date]
+    temperature: 0.0
+    max_steps: 6
+    system_prompt: >-
+      You are a precise research assistant. Use web_search for anything that may have changed
+      recently, calculator for any arithmetic, and current_date when the date matters.
+      If a tool fails, retry once or try a different approach. Answer concisely and put the
+      final answer in the last sentence.
+
+  - name: GPT-OSS 120B · no tools (baseline)
+    description: Same model as the 120B agent but without tools, to measure what tools add.
+    model: groq/openai/gpt-oss-120b
+    tools: []
+    temperature: 0.0
+    max_steps: 1
+    system_prompt: >-
+      You are a precise assistant. Answer concisely and put the final answer in the last sentence.
+
+  - name: Nemotron Lightning · tools (OpenRouter free)
+    description: Free-tier OpenRouter model with tools; expect higher latency and occasional 429s.
+    model: openrouter/nvidia/nemotron-3.5-lightning:free
+    tools: [web_search, calculator, current_date]
+    temperature: 0.0
+    max_steps: 6
+    system_prompt: >-
+      You are a precise research assistant. Use web_search for anything that may have changed
+      recently, calculator for any arithmetic, and current_date when the date matters.
+      Answer concisely and put the final answer in the last sentence.
+
+  - name: Granite4 3B · tools (local Ollama)
+    description: Small local model via Ollama. Zero cost, runs offline; slower on first call.
+    model: ollama/granite4:3b
+    tools: [web_search, calculator, current_date]
+    temperature: 0.0
+    max_steps: 6
+    system_prompt: >-
+      You are a helpful assistant. Use the calculator for arithmetic, web_search for facts that
+      may have changed, and current_date for the date. Answer concisely.

@@ -15,7 +15,7 @@ still true today, extracting time-sensitive claims and verifying them against li
 | Scoring, reliability & freshness analytics | AgentPulse evaluation engine |
 | API / UI / storage | FastAPI · Streamlit · PostgreSQL |
 
-> **Status:** Phase 1 of 7. Database, plus Bifrost and Tavily clients (real + mock), verified live. See [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Phase 2 of 7. Agents with tools, fault injection and execution traces, plus the Agents dashboard page. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
@@ -43,6 +43,8 @@ Full instructions, API keys, Ollama setup and troubleshooting: **[docs/setup.md]
 - [Setup & configuration](docs/setup.md): keys, Ollama, mock vs live mode, troubleshooting
 - [Architecture](docs/architecture.md): components, clients, data model
 - [Bifrost integration](docs/bifrost.md): gateway config, model ids, error handling, live check
+- [Agents](docs/agents.md): agent definition, default agents, tools, runtime loop, fault injection
+- [API reference](docs/api.md): endpoints with curl examples (full spec at http://localhost:8000/docs)
 
 ## Repository layout
 
@@ -67,4 +69,5 @@ docs/        Project documentation
 | `make live-check` | Test real Bifrost providers, tool calling and Tavily end to end |
 | `make db-tables` | List PostgreSQL tables |
 | `make test` / `make lint` / `make format` | Tests / lint check / auto-fix |
+| `make ui-test` | Render dashboard pages against the running stack (needs `make up`) |
 | `make check` | Lint + tests. **Run before every commit.** |

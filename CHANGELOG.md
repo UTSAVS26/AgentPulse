@@ -2,6 +2,21 @@
 
 All notable changes per build phase.
 
+## [Phase 2] Agent runtime, tools & tracing
+
+### Added
+- Tools: `web_search` (Tavily), `calculator` (safe AST evaluator, no `eval`), `current_date`, in OpenAI function-calling format.
+- Agent runtime: tool-calling loop with `max_steps`, LLM retries with exponential backoff (retryable errors only), fault injection (`timeout`, `http_500`, `empty`, `malformed`) with a seeded RNG, and a full trace of every model call, tool call, result, error and retry.
+- Agents API: CRUD, `GET /tools`, `POST /agents/{id}/try`, `GET /executions/{id}`, `GET /agents/{id}/executions`.
+- 6 default agents (Groq ×3 incl. a no-tools baseline, OpenRouter free, local Ollama), seeded idempotently from YAML. All verified live with tool calling.
+- Dashboard: **Agents** page (list, create, edit, delete, try with fault injection, trace timeline). Shared `ui.py` (sidebar status, metrics, trace renderer).
+- Tests: 53 new backend tests (91 total) for tools, runtime and the agents API, plus 5 Streamlit AppTest UI tests (`make ui-test`).
+- Docs: `docs/agents.md`, `docs/api.md`.
+
+### Changed
+- Default `LLM_TIMEOUT_S` raised to 120 s (cold-starting local Ollama models can take over 50 s).
+- `pandas` is pinned in the frontend.
+
 ## [Phase 1] Database & LLM/search clients
 
 ### Added

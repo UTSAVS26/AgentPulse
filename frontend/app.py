@@ -1,28 +1,10 @@
-"""AgentPulse Streamlit dashboard — home page."""
+"""AgentPulse Streamlit dashboard: home page."""
 
 import streamlit as st
 
-import api
+from ui import page_setup
 
-st.set_page_config(page_title="AgentPulse", page_icon="📈", layout="wide")
-
-
-def sidebar_status() -> None:
-    """Show backend connectivity and mock/live mode in the sidebar."""
-    data, err = api.health()
-    with st.sidebar:
-        st.markdown("### System status")
-        if err:
-            st.error(err)
-            return
-        st.success(f"Backend online · v{data['version']}")
-        if data.get("mock_mode"):
-            st.warning("MOCK MODE: simulated LLM and search responses")
-        else:
-            st.info("LIVE MODE: Bifrost + Tavily")
-
-
-sidebar_status()
+page_setup("Home")
 
 st.title("📈 AgentPulse")
 st.subheader("AI agent benchmarking & reliability platform")
@@ -37,5 +19,8 @@ whether their answers are **still true today** with live web verification.
 | Agent execution, routing across providers | **Bifrost** AI gateway |
 | Live search & claim verification | **Tavily** |
 | Scoring, reliability & freshness analytics | AgentPulse evaluation engine |
+
+**Get started:** open **Agents** in the sidebar to inspect the pre-configured agents and run
+one on a prompt, with optional fault injection to test how it recovers.
 """
 )

@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 from app import __version__
 from app.clients import LLMClient, LLMError, SearchClient, get_llm_client, get_search_client
 from app.config import Settings, get_settings
-from app.db import init_db, ping_db
+from app.db import get_sessionmaker, init_db, ping_db
+from app.routers import agents as agents_router
+from app.seed import seed_agents
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -20,6 +22,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    if get_settings().seed_on_startup:
+        with get_sessionmaker()() as db:
+            seed_agents(db)
     yield
 
 
@@ -32,6 +37,9 @@ app = FastAPI(
         "and detect stale answers with live Tavily verification. LLM traffic goes through Bifrost."
     ),
 )
+
+
+app.include_router(agents_router.router)
 
 
 class ComponentStatus(BaseModel):

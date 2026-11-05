@@ -28,8 +28,8 @@
 
 | Component | Responsibility | Status |
 |---|---|---|
-| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home page + status |
-| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | `/health` (per-component), `/models`, DB schema, LLM + search clients |
+| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home + Agents pages (`ui.py` shared helpers) |
+| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents CRUD, agent runtime (tools, retries, fault injection, traces), `/health`, `/models` |
 | **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
 | **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer verifier. | Client ready, verified live |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
