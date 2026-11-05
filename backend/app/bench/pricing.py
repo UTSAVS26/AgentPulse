@@ -79,6 +79,13 @@ class PriceBook:
             log.warning("Could not load pricing from Bifrost (%s); using snapshot", exc)
 
     def price(self, model: str) -> Price:
+        if model.startswith("custom/"):  # a user's model connection: its own prices, or free
+            from app.clients.router import connection_prices
+
+            per_m = connection_prices(model)
+            if per_m is None:
+                return Price(0.0, 0.0, "connection (no price set)")
+            return Price(per_m[0] / 1e6, per_m[1] / 1e6, "connection")
         with self._lock:
             self._refresh()
             if model in self._catalogue:

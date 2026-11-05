@@ -4,7 +4,7 @@ AgentPulse benchmarks **agents**, not just models. An agent is:
 
 | Part | Field | Example |
 |---|---|---|
-| Model (routed through Bifrost) | `model` | `groq/openai/gpt-oss-20b` |
+| Model: built into Bifrost, or one of your own [model connections](models.md) | `model` | `groq/openai/gpt-oss-20b`, `custom/my-ollama/granite4:3b` |
 | Instructions | `system_prompt` | "Use web_search for anything that may have changed…" |
 | Tools | `tools` | `["web_search", "calculator", "current_date"]` |
 | Step budget | `max_steps` | `6` model calls per task |

@@ -346,3 +346,142 @@ class FreshnessCheckSummary(BaseModel):
 
 class FreshnessCheckOut(FreshnessCheckSummary):
     claims: list[ClaimOut]
+
+
+# ------------------------------------------------------------------------------------ model connections
+_SLUG = r"^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$|^[a-z0-9]$"
+
+
+def _clean_models(v: list[str]) -> list[str]:
+    out = list(dict.fromkeys(m.strip() for m in v if m and m.strip()))
+    bad = [m for m in out if len(m) > 200 or any(c.isspace() for c in m)]
+    if bad:
+        raise ValueError(f"model names can't contain spaces or exceed 200 characters: {bad}")
+    if len(out) > 100:
+        raise ValueError("at most 100 models per connection")
+    return out
+
+
+class ConnectionBase(BaseModel):
+    name: str = Field(min_length=1, max_length=80, examples=["My LM Studio"])
+    preset: str | None = Field(
+        default=None, description="Preset id from GET /connections/presets (informational)."
+    )
+    base_url: str = Field(
+        min_length=8,
+        max_length=500,
+        description="API root that contains `/chat/completions`, e.g. `http://localhost:11434/v1`.",
+        examples=["http://localhost:11434/v1"],
+    )
+    models: list[str] = Field(
+        default_factory=list,
+        description="Model names agents can use (`custom/<slug>/<model>`).",
+        examples=[["llama3.2"]],
+    )
+    price_input_per_m: float | None = Field(
+        default=None, ge=0, description="USD per 1M input tokens (optional)."
+    )
+    price_output_per_m: float | None = Field(
+        default=None, ge=0, description="USD per 1M output tokens (optional)."
+    )
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name must not be blank")
+        return v
+
+    @field_validator("models")
+    @classmethod
+    def _models(cls, v: list[str]) -> list[str]:
+        return _clean_models(v)
+
+
+class ConnectionCreate(ConnectionBase):
+    slug: str | None = Field(
+        default=None,
+        pattern=_SLUG,
+        description="Id used in model ids (`custom/<slug>/<model>`); derived from the name if omitted. "
+        "Can't be changed later.",
+    )
+    api_key: str | None = Field(
+        default=None, max_length=1000, description="Optional. Stored encrypted, never returned."
+    )
+
+
+class ConnectionUpdate(ConnectionBase):
+    api_key: str | None = Field(
+        default=None, max_length=1000, description="New key; omit or null to keep the current one."
+    )
+    clear_api_key: bool = Field(default=False, description="Remove the stored key.")
+
+
+class ConnectionOut(BaseModel):
+    id: int
+    name: str
+    slug: str
+    kind: str
+    route: str
+    preset: str | None
+    base_url: str
+    has_api_key: bool
+    key_hint: str | None
+    models: list[str]
+    model_ids: list[str] = Field(description="Ids to use as an agent's model.")
+    discovered_models: list[str] | None
+    supports_tools: bool | None
+    price_input_per_m: float | None
+    price_output_per_m: float | None
+    last_check_ok: bool | None
+    last_check_detail: str | None
+    last_check_at: datetime | None
+    agents: list[str] = Field(default_factory=list, description="Agents using this connection.")
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConnectionTestIn(BaseModel):
+    """Check an endpoint before saving it (or a saved connection with `POST /connections/{id}/test`)."""
+
+    base_url: str = Field(min_length=8, max_length=500)
+    api_key: str | None = Field(default=None, max_length=1000)
+    model: str | None = Field(
+        default=None, max_length=200, description="Model to try; omit to only list models."
+    )
+
+
+class ConnectionTestModel(BaseModel):
+    model: str | None = Field(default=None, max_length=200)
+
+
+class ConnectionTestOut(BaseModel):
+    ok: bool = Field(
+        description="True when the endpoint answered (models listed, or the test chat succeeded)."
+    )
+    base_url: str = Field(description="Normalised URL actually called.")
+    hint: str | None = None
+    models: list[str] | None = Field(
+        default=None, description="From `GET <base>/models`, if the server lists them."
+    )
+    models_error: str | None = None
+    model: str | None = None
+    chat_ok: bool | None = None
+    chat_latency_ms: float | None = None
+    chat_reply: str | None = None
+    chat_error: str | None = None
+    tools_ok: bool | None = Field(
+        default=None, description="The model produced a tool call (needed for tools)."
+    )
+    tools_detail: str | None = None
+
+
+class PresetOut(BaseModel):
+    id: str
+    label: str
+    group: str
+    base_url: str
+    needs_key: bool
+    model_hint: str
+    bifrost_provider: str | None

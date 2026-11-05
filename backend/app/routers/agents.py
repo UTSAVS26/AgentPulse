@@ -11,10 +11,11 @@ from sqlalchemy.orm import Session
 
 from app.agents.runtime import AgentSpec, RuntimeConfig, run_agent, save_execution
 from app.agents.tools import TOOLS
+from app.clients.router import CUSTOM_PREFIX, parse_custom
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.mode import Mode, get_mode, require_admin
-from app.models import Agent, FreshnessCheck, TaskExecution
+from app.models import Agent, FreshnessCheck, ModelConnection, TaskExecution
 from app.schemas import (
     AgentCreate,
     AgentOut,
@@ -40,6 +41,19 @@ def _commit_or_conflict(db: Session, name: str) -> None:
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=f"an agent named '{name}' already exists") from exc
+
+
+def _check_model(db: Session, model: str) -> None:
+    """``custom/<slug>/<model>`` must name an existing connection (Bifrost ids are checked at call time)."""
+    parsed = parse_custom(model)
+    if model.startswith(CUSTOM_PREFIX) and parsed is None:
+        raise HTTPException(
+            status_code=422, detail="custom models look like custom/<connection-slug>/<model>"
+        )
+    if parsed and db.scalar(select(ModelConnection.id).where(ModelConnection.slug == parsed[0])) is None:
+        raise HTTPException(
+            status_code=422, detail=f"no model connection '{parsed[0]}': add it on the Models page first"
+        )
 
 
 def execution_detail(db: Session, execution: TaskExecution) -> ExecutionDetailOut:
@@ -72,6 +86,7 @@ def list_agents(db: Session = Depends(get_db)) -> list[Agent]:
 
 @router.post("/agents", response_model=AgentOut, status_code=201, summary="Create an agent")
 def create_agent(body: AgentCreate, db: Session = Depends(get_db)) -> Agent:
+    _check_model(db, body.model)
     agent = Agent(**body.model_dump())
     db.add(agent)
     _commit_or_conflict(db, body.name)
@@ -92,6 +107,7 @@ def get_agent(agent_id: int, db: Session = Depends(get_db)) -> Agent:
 )
 def update_agent(agent_id: int, body: AgentUpdate, db: Session = Depends(get_db)) -> Agent:
     agent = _get_agent(db, agent_id)
+    _check_model(db, body.model)
     for key, value in body.model_dump().items():
         setattr(agent, key, value)
     _commit_or_conflict(db, body.name)

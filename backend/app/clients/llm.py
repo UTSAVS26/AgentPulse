@@ -157,20 +157,40 @@ def parse_completion(body: dict[str, Any], requested_model: str, latency_ms: flo
     )
 
 
-class BifrostClient:
-    """Real LLM client: OpenAI-compatible calls through the Bifrost gateway."""
+class OpenAICompatibleClient:
+    """Client for any OpenAI-compatible chat API: Bifrost, or a user's endpoint (Ollama, LM Studio, vLLM,
+    llama.cpp, OpenAI, Anthropic/Gemini compatibility endpoints...).
+
+    ``base_url`` is the API root that contains ``/chat/completions`` (e.g. ``http://host:11434/v1``). The API
+    key, if any, is sent as ``Authorization: Bearer`` and scrubbed from every error message.
+    """
+
+    chat_path = "/chat/completions"
+    models_path = "/models"
 
     def __init__(
         self,
         base_url: str,
+        api_key: str | None = None,
         timeout_s: float = 60.0,
         health_timeout_s: float = 3.0,
         transport: httpx.BaseTransport | None = None,
+        label: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.health_timeout_s = health_timeout_s
-        self._http = httpx.Client(timeout=httpx.Timeout(timeout_s, connect=10.0), transport=transport)
+        self.label = label or (httpx.URL(self.base_url).host or self.base_url)
+        self._api_key = api_key or None
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        self._http = httpx.Client(
+            timeout=httpx.Timeout(timeout_s, connect=10.0), transport=transport, headers=headers
+        )
+
+    def _scrub(self, message: str) -> str:
+        if self._api_key and len(self._api_key) >= 6:
+            message = message.replace(self._api_key, "***")
+        return message
 
     def chat(
         self,
@@ -189,13 +209,15 @@ class BifrostClient:
 
         started = time.perf_counter()
         try:
-            res = self._http.post(f"{self.base_url}/v1/chat/completions", json=payload)
+            res = self._http.post(f"{self.base_url}{self.chat_path}", json=payload)
         except httpx.TimeoutException as exc:
             raise LLMError(
                 f"no response within {self.timeout_s:.0f}s", retryable=True, kind="timeout"
             ) from exc
         except httpx.HTTPError as exc:
-            raise LLMError(f"cannot reach Bifrost: {exc}", retryable=True, kind="connection") from exc
+            raise LLMError(
+                self._scrub(f"cannot reach {self.label}: {exc}"), retryable=True, kind="connection"
+            ) from exc
         latency_ms = (time.perf_counter() - started) * 1000
 
         try:
@@ -204,26 +226,57 @@ class BifrostClient:
             body = None
 
         if res.status_code >= 400:
-            message = _extract_error_message(body, res.text or res.reason_phrase)
+            message = self._scrub(_extract_error_message(body, res.text or res.reason_phrase))
             retryable = res.status_code == 429 or res.status_code >= 500
             kind = "rate_limited" if res.status_code == 429 else "provider_error"
             if res.status_code == 400 and _is_invalid_tool_call(message):
                 # The *model* produced a tool call that the provider rejected against the schema.
                 # The agent runtime gives the model a chance to correct it.
                 retryable, kind = True, "invalid_tool_call"
+            if res.status_code in (401, 403):
+                kind = "auth"
             raise LLMError(message, retryable=retryable, status_code=res.status_code, kind=kind)
         if not isinstance(body, dict):
-            raise LLMError("non-JSON response from Bifrost", retryable=True, kind="bad_response")
+            raise LLMError(f"non-JSON response from {self.label}", retryable=True, kind="bad_response")
         return parse_completion(body, model, latency_ms)
 
     def list_models(self) -> list[str]:
-        """Return every ``provider/model`` id Bifrost can route to."""
+        """Model ids the endpoint reports (``GET /models``)."""
         try:
-            res = self._http.get(f"{self.base_url}/v1/models", timeout=30.0)
+            res = self._http.get(f"{self.base_url}{self.models_path}", timeout=30.0)
             res.raise_for_status()
             return sorted(m["id"] for m in res.json().get("data", []) if "id" in m)
-        except (httpx.HTTPError, ValueError, KeyError) as exc:
-            raise LLMError(f"could not list models: {exc}", retryable=True, kind="list_models") from exc
+        except (httpx.HTTPError, ValueError, KeyError, AttributeError, TypeError) as exc:
+            raise LLMError(
+                self._scrub(f"could not list models: {exc}"), retryable=True, kind="list_models"
+            ) from exc
+
+    def ping(self) -> tuple[bool, str]:
+        try:
+            res = self._http.get(f"{self.base_url}{self.models_path}", timeout=self.health_timeout_s)
+        except httpx.HTTPError as exc:
+            return False, f"unreachable: {type(exc).__name__}"
+        return (True, "ok") if res.status_code == 200 else (False, f"HTTP {res.status_code}")
+
+
+class BifrostClient(OpenAICompatibleClient):
+    """Real LLM client: OpenAI-compatible calls through the Bifrost gateway (``/v1/...``)."""
+
+    chat_path = "/v1/chat/completions"
+    models_path = "/v1/models"
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout_s: float = 60.0,
+        health_timeout_s: float = 3.0,
+        transport: httpx.BaseTransport | None = None,
+    ):
+        super().__init__(base_url, None, timeout_s, health_timeout_s, transport, label="Bifrost")
+
+    def list_models(self) -> list[str]:
+        """Return every ``provider/model`` id Bifrost can route to."""
+        return super().list_models()
 
     def ping(self) -> tuple[bool, str]:
         try:

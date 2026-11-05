@@ -1,0 +1,168 @@
+"""Known OpenAI-compatible endpoints, to prefill the "Add connection" form.
+
+``base_url`` is the API root that contains ``/chat/completions``. Local servers use ``localhost``; inside
+Docker the backend rewrites it to the host (``LOCALHOST_ALIAS``). ``bifrost_provider`` names the matching
+native Bifrost provider (used by v2.3's runtime registration).
+"""
+
+from __future__ import annotations
+
+PRESETS: list[dict] = [
+    # ---- self-hosted / local
+    {
+        "id": "ollama",
+        "label": "Ollama",
+        "group": "local",
+        "base_url": "http://localhost:11434/v1",
+        "needs_key": False,
+        "model_hint": "e.g. llama3.2, qwen3.5:9b (ollama list)",
+        "bifrost_provider": "ollama",
+    },
+    {
+        "id": "lmstudio",
+        "label": "LM Studio",
+        "group": "local",
+        "base_url": "http://localhost:1234/v1",
+        "needs_key": False,
+        "model_hint": "the model id shown in LM Studio's server tab",
+        "bifrost_provider": None,
+    },
+    {
+        "id": "vllm",
+        "label": "vLLM",
+        "group": "local",
+        "base_url": "http://localhost:8000/v1",
+        "needs_key": False,
+        "model_hint": "the --model you served",
+        "bifrost_provider": "vllm",
+    },
+    {
+        "id": "llamacpp",
+        "label": "llama.cpp server",
+        "group": "local",
+        "base_url": "http://localhost:8080/v1",
+        "needs_key": False,
+        "model_hint": "any name (llama-server serves one model)",
+        "bifrost_provider": None,
+    },
+    {
+        "id": "jan",
+        "label": "Jan",
+        "group": "local",
+        "base_url": "http://localhost:1337/v1",
+        "needs_key": False,
+        "model_hint": "the model id in Jan's local API server",
+        "bifrost_provider": None,
+    },
+    # ---- hosted (OpenAI-compatible endpoints)
+    {
+        "id": "openai",
+        "label": "OpenAI",
+        "group": "hosted",
+        "base_url": "https://api.openai.com/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "openai",
+    },
+    {
+        "id": "anthropic",
+        "label": "Anthropic (OpenAI-compatible)",
+        "group": "hosted",
+        "base_url": "https://api.anthropic.com/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "anthropic",
+    },
+    {
+        "id": "gemini",
+        "label": "Google Gemini (OpenAI-compatible)",
+        "group": "hosted",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "gemini",
+    },
+    {
+        "id": "mistral",
+        "label": "Mistral",
+        "group": "hosted",
+        "base_url": "https://api.mistral.ai/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "mistral",
+    },
+    {
+        "id": "deepseek",
+        "label": "DeepSeek",
+        "group": "hosted",
+        "base_url": "https://api.deepseek.com/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "deepseek",
+    },
+    {
+        "id": "xai",
+        "label": "xAI",
+        "group": "hosted",
+        "base_url": "https://api.x.ai/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "xai",
+    },
+    {
+        "id": "cerebras",
+        "label": "Cerebras",
+        "group": "hosted",
+        "base_url": "https://api.cerebras.ai/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "cerebras",
+    },
+    {
+        "id": "together",
+        "label": "Together AI",
+        "group": "hosted",
+        "base_url": "https://api.together.xyz/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": None,
+    },
+    {
+        "id": "fireworks",
+        "label": "Fireworks AI",
+        "group": "hosted",
+        "base_url": "https://api.fireworks.ai/inference/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": None,
+    },
+    {
+        "id": "groq",
+        "label": "Groq (your own key)",
+        "group": "hosted",
+        "base_url": "https://api.groq.com/openai/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "groq",
+    },
+    {
+        "id": "openrouter",
+        "label": "OpenRouter (your own key)",
+        "group": "hosted",
+        "base_url": "https://openrouter.ai/api/v1",
+        "needs_key": True,
+        "model_hint": "use Fetch models after adding the key",
+        "bifrost_provider": "openrouter",
+    },
+    {
+        "id": "custom",
+        "label": "Custom endpoint",
+        "group": "custom",
+        "base_url": "",
+        "needs_key": False,
+        "model_hint": "the model name your server expects",
+        "bifrost_provider": None,
+    },
+]
+
+BY_ID = {p["id"]: p for p in PRESETS}

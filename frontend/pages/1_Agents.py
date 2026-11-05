@@ -11,8 +11,8 @@ from ui import execution_summary, page_setup, render_trace, show_error
 page_setup("Agents", "🤖")
 st.title("🤖 Agents")
 st.caption(
-    "An agent = a model (routed through Bifrost) + a system prompt + a set of tools + a step budget. "
-    "Benchmarks run every agent on identical tasks."
+    "An agent = a model (built into Bifrost, or one of **your own** from the Models page) + a system "
+    "prompt + a set of tools + a step budget. Benchmarks run every agent on identical tasks."
 )
 
 CUSTOM_MODEL = "✏️ Custom model id…"
@@ -34,6 +34,10 @@ agents, err = api.get("/agents")
 if show_error(err):
     st.stop()
 models, models_err = load_models()
+connections, _ = api.get("/connections")
+CONN_MODELS = {
+    mid: c for c in connections or [] for mid in c["model_ids"]
+}  # custom/<slug>/<model> -> its connection
 tools_catalogue = load_tools()
 tool_names = [t["name"] for t in tools_catalogue]
 
@@ -62,12 +66,19 @@ by_label = {f"{a['name']}  ·  {a['model']}": a for a in agents}
 tab_try, tab_create, tab_edit = st.tabs(["▶️ Try an agent", "➕ Create", "✏️ Edit / delete"])
 
 
+def _model_label(model: str) -> str:
+    conn = CONN_MODELS.get(model)
+    if conn is None:
+        return model
+    return f"🔌 {conn['name']} · {model.split('/', 2)[2]}"
+
+
 def agent_form(key: str, initial: dict | None = None) -> dict | None:
     """Render the agent form; returns the submitted payload or None."""
     initial = initial or {}
     if models_err:
         st.warning(f"Could not load model list ({models_err}). Enter a model id manually.")
-    model_options = list(models)
+    model_options = [*CONN_MODELS, *(m for m in models if m not in CONN_MODELS)]
     if initial.get("model") and initial["model"] not in model_options:
         model_options.insert(0, initial["model"])
     model_options.append(CUSTOM_MODEL)
@@ -77,7 +88,12 @@ def agent_form(key: str, initial: dict | None = None) -> dict | None:
         description = st.text_input("Description", value=initial.get("description", ""))
         default_idx = model_options.index(initial["model"]) if initial.get("model") in model_options else 0
         model_choice = st.selectbox(
-            "Model (Bifrost id)", model_options, index=default_idx, help="Type to search the list."
+            "Model",
+            model_options,
+            index=default_idx,
+            format_func=_model_label,
+            help="🔌 = one of your model connections (Models page); others are routed by Bifrost. "
+            "Type to search.",
         )
         custom_model = st.text_input(
             "Custom model id (used when 'Custom model id…' is selected)",
@@ -101,6 +117,12 @@ def agent_form(key: str, initial: dict | None = None) -> dict | None:
     if not name.strip() or not model:
         st.error("Name and model are required.")
         return None
+    conn = CONN_MODELS.get(model)
+    if conn and selected_tools and conn["supports_tools"] is False:
+        st.warning(
+            f"⚠️ {conn['name']} failed the tool-calling test: this agent's tools may not be used. "
+            "Consider an agent without tools for this model."
+        )
     return {
         "name": name.strip(),
         "description": description,
@@ -159,11 +181,20 @@ with tab_try:
 
 # ------------------------------------------------------------------------------------ create
 with tab_create:
-    payload = agent_form("create_form")
+    prefill = {}
+    if st.session_state.get("prefill_agent_model"):
+        prefill = {
+            "model": st.session_state["prefill_agent_model"],
+            "name": st.session_state.get("prefill_agent_name", ""),
+        }
+        st.info("Model pre-selected from the **Models** page: the ➕ Create tab has it ready.")
+    payload = agent_form("create_form", prefill or None)
     if payload:
         created, err = api.post("/agents", json=payload)
         if not show_error(err):
             st.success(f"Created agent **{created['name']}** (id {created['id']}).")
+            st.session_state.pop("prefill_agent_model", None)
+            st.session_state.pop("prefill_agent_name", None)
             st.rerun()
 
 # ------------------------------------------------------------------------------------ edit / delete

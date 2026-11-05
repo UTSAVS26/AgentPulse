@@ -193,3 +193,32 @@ class Claim(Base):
     method: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     check: Mapped[FreshnessCheck] = relationship(back_populates="claims")
+
+
+class ModelConnection(Base):
+    """A user-added model endpoint: any OpenAI-compatible base URL (self-hosted or hosted).
+
+    Agents use its models as ``custom/<slug>/<model>``. The API key is stored encrypted (``app.crypto``) and
+    is never returned by the API; ``key_hint`` identifies it (``sk-…a1b2``)."""
+
+    __tablename__ = "model_connections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True)
+    slug: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    kind: Mapped[str] = mapped_column(String(30), default="openai_compatible")  # openai_compatible | hosted
+    route: Mapped[str] = mapped_column(String(20), default="direct")  # direct | bifrost
+    preset: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    base_url: Mapped[str] = mapped_column(Text)
+    api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    key_hint: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    models: Mapped[list[str]] = mapped_column(JSON, default=list)
+    discovered_models: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    supports_tools: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    price_input_per_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_output_per_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_check_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_check_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

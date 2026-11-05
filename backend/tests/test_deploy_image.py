@@ -60,6 +60,7 @@ def test_render_blueprint():
     assert env["MOCK_MODE"]["value"] == "true"
     for secret in ("LIVE_ACCESS_CODE", "GROQ_API_KEY", "OPENROUTER_API_KEY", "TAVILY_API_KEY"):
         assert env[secret] == {"key": secret, "sync": False}, f"{secret} must be prompted, never committed"
+    assert env["APP_SECRET"] == {"key": "APP_SECRET", "generateValue": True}  # encrypts stored model keys
     # An empty DATABASE_URL would override the image's SQLite default, so it must not be declared here.
     assert "DATABASE_URL" not in env
 

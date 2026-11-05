@@ -104,7 +104,10 @@ def test_mock_and_live_clients_are_distinct():
     from app.clients import clients_for
 
     assert isinstance(clients_for(False)[0], MockLLMClient)
-    assert isinstance(clients_for(True)[0], BifrostClient)
+    live = clients_for(True)[0]
+    from app.clients import ModelRouter
+
+    assert isinstance(live, ModelRouter) and isinstance(live.bifrost, BifrostClient)  # Bifrost + connections
 
 
 def test_engine_live_run_uses_live_clients_and_mock_run_uses_mock(db_engine):

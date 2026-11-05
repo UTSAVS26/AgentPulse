@@ -25,3 +25,6 @@ services:
         sync: false
       - key: TAVILY_API_KEY
         sync: false
+      # Encrypts API keys stored for model connections (Render generates a random value once).
+      - key: APP_SECRET
+        generateValue: true

@@ -54,6 +54,21 @@ class Settings(BaseSettings):
     much better dated sources than basic). Results are cached per run, so each distinct claim is
     searched once."""
 
+    app_secret: str = ""
+    """Encrypts stored API keys of model connections. If empty, a random secret is generated once and kept
+    in ``app_secret_file`` (keys saved under one secret can't be read with another)."""
+
+    app_secret_file: str = ""
+    """Where the generated secret is kept when ``APP_SECRET`` is empty (default: the temp directory)."""
+
+    allow_private_endpoints: bool | None = None
+    """Allow model connections to private/loopback addresses (Ollama, LM Studio on your machine). Default:
+    allowed locally, blocked on the public deployment (SSRF protection)."""
+
+    localhost_alias: str = ""
+    """In Docker, ``localhost`` in a connection URL means the container itself. Set to
+    ``host.docker.internal`` (compose does) so ``http://localhost:11434/v1`` reaches the host."""
+
     seed_on_startup: bool = True
     """Insert the default demo agents on startup (existing agents are never modified)."""
 

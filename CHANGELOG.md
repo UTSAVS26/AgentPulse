@@ -2,6 +2,32 @@
 
 All notable changes per build phase.
 
+## [v2.2] Bring your own model: OpenAI-compatible connections
+
+### Added
+- **🔌 Models** page: connect any OpenAI-compatible endpoint with a base URL, model name(s) and an optional API key.
+  - Presets for Ollama, LM Studio, vLLM, llama.cpp, Jan, OpenAI, Anthropic, Gemini, Mistral, DeepSeek, xAI, Cerebras, Together, Fireworks, Groq and OpenRouter, plus a custom option.
+  - **Fetch models**, **test** (a one-word chat, latency, a tool-calling check), edit, delete, optional prices per 1M tokens.
+  - **🤖 New agent** opens the Agents page with the model pre-selected.
+- Agents use connection models as `custom/<slug>/<model>`. They are marked 🔌 in the Agents model picker, which warns when you give tools to a model that failed the tool-calling test. They work in try-an-agent, benchmarks, Compare, Traces and Reports.
+- API: `GET /connections/presets`, `GET/POST /connections`, `GET/PUT/DELETE /connections/{id}`, `POST /connections/test`, `POST /connections/{id}/test`. `POST/PUT /agents` validate `custom/` ids.
+- `ModelRouter`: `custom/…` ids go to the connection's client and everything else to Bifrost. The engine, judge and freshness checker work unchanged. `BifrostClient` is now a subclass of a generic `OpenAICompatibleClient` (Bearer key; keys scrubbed from errors; 401/403 → `auth`).
+- **Security:**
+  - keys are encrypted at rest (`app/crypto.py`, Fernet, `APP_SECRET`) and never returned (only `key_hint`);
+  - URL guard (`app/net_guard.py`): http(s) only, no credentials in the URL;
+  - on the public demo, private, loopback, link-local, metadata and `*.internal` addresses are rejected, and creating or testing a connection needs the access code.
+- **Docker:** `localhost` in a connection URL is rewritten to `host.docker.internal` (`LOCALHOST_ALIAS`, `extra_hosts`), and the UI explains it. The generated secret persists in the `appdata` volume. Render generates `APP_SECRET`.
+- Pricing: connection models use the connection's prices ($0 if none set), labelled `connection`.
+- New dependency `cryptography==44.0.0`. New table `model_connections`, created on startup.
+- Tests: 35 backend connection tests (crypto, URL guard, API without key leaks, probing against a fake server, routing and cache rebuild, a live benchmark priced from the connection) and 4 page tests. The deploy-image smoke test checks connection security (16 checks).
+- Docs: `docs/models.md`, plus updates to the API, agents, setup, dashboard, architecture, deployment and README docs.
+
+### Verified live
+- A local **Ollama** entered as `http://localhost:11434/v1`: rewritten to reach the host, 6 models discovered, chat in 8.5 s, tool calling ✓.
+- An agent on `custom/my-ollama/granite4:3b` with the calculator answered 395 (correct).
+- A live Math & Reasoning benchmark ran it next to `groq/openai/gpt-oss-20b` via Bifrost: both 100%, local p50 7.6 s at $0 vs 1.0 s and $0.0005.
+- In a real browser: preset → Fetch models reached the host's Ollama and offered all 6 models.
+
 ## [v2.1] Build your own benchmarks: suites & task editor
 
 ### Added

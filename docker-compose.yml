@@ -52,6 +52,15 @@ services:
       FRESHNESS_MODEL: ${FRESHNESS_MODEL:-groq/openai/gpt-oss-120b}
       FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free}
       FRESHNESS_SEARCH_DEPTH: ${FRESHNESS_SEARCH_DEPTH:-advanced}
+      # Model connections: encryption secret for stored API keys (generated into the volume if empty),
+      # and "localhost" in a connection URL means your machine, not the container.
+      APP_SECRET: ${APP_SECRET:-}
+      APP_SECRET_FILE: /data/app_secret
+      LOCALHOST_ALIAS: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - appdata:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,3 +82,4 @@ services:
 volumes:
   pgdata:
   bifrost-data:
+  appdata:

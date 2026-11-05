@@ -102,6 +102,27 @@ def main() -> int:
         (status, task_status),
     )
 
+    conn = {
+        "name": "Smoke conn",
+        "base_url": "https://8.8.8.8/v1",
+        "models": ["m"],
+        "api_key": "sk-smoke-1234",
+    }
+    no_code = call("POST", "/connections", conn)[0]
+    status, created = call("POST", "/connections", conn, code=CODE)
+    private = call(
+        "POST", "/connections", {**conn, "name": "P", "base_url": "http://localhost:11434/v1"}, code=CODE
+    )
+    check(
+        "connections: code required, key never returned, private URLs blocked",
+        no_code == 403
+        and status == 201
+        and "sk-smoke-1234" not in str(created)
+        and created.get("key_hint") == "sk-…1234"
+        and private[0] == 422,
+        (no_code, status, private),
+    )
+
     check("wrong access code -> 401", call("GET", "/health", code="nope")[0] == 401)
     status, live = call("GET", "/health", code=CODE)
     check("right access code -> live mode", status == 200 and live.get("mock_mode") is False, live)

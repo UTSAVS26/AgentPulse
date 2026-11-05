@@ -26,6 +26,8 @@ the first load.
 | | |
 |---|---|
 | **Agents** | Model + system prompt + tools (`web_search`, `calculator`, `current_date`) + step budget. Six pre-configured across Groq, OpenRouter and local Ollama. Try one on a prompt, with fault injection, and see its trace. |
+| **Bring your own model** | Connect any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, llama.cpp, OpenAI, Anthropic, Gemini, Mistral…) with a base URL, model name and optional API key (encrypted, never shown again). Test chat and tool calling, then benchmark it next to the built-in models. |
+| **Your own benchmarks** | Create, duplicate, import and export (YAML, CSV) suites; edit tasks in a table; test scorers on sample answers. |
 | **Benchmarks** | Suite × agents × repeats × fault rate, in the background with live progress. Scorers: contains, exact, numeric, regex, LLM judge. Three built-in suites (factual QA, math & reasoning with tools, time-sensitive current events). |
 | **Reliability metrics** | Accuracy, consistency, pass@k, pass-all-k, error rate, **recovery rate** (failed and still correct), p50/p95 latency, tokens, list-price cost, cost per correct answer, and a composite **reliability score** with documented weights. |
 | **Fault injection** | Tool timeouts, HTTP 500s, empty and malformed results; LLM retries with backoff; rate-limit-aware retries; corrective retry on rejected tool calls. |
@@ -128,6 +130,7 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 - [Architecture](docs/architecture.md): components, clients, detector modules, data model
 - [Bifrost integration](docs/bifrost.md): gateway config, model ids, error handling, live check
 - [Agents](docs/agents.md): agent definition, default agents, tools, runtime loop, fault injection
+- [Models](docs/models.md): bring your own model: connections, presets, keys, security
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula, the reliability score and freshness
 - [Stale-answer detection](docs/stale-answer-detection.md): pipeline, verdicts, freshness score, rate limits, live results

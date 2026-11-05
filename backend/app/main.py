@@ -16,6 +16,7 @@ from app.config import Settings, get_settings
 from app.db import get_sessionmaker, init_db, ping_db
 from app.mode import ACCESS_CODE_HEADER, Mode, get_mode, is_public_deployment, live_available
 from app.routers import agents as agents_router
+from app.routers import connections as connections_router
 from app.routers import freshness as freshness_router
 from app.routers import reports as reports_router
 from app.routers import runs as runs_router
@@ -52,6 +53,7 @@ app = FastAPI(
 
 
 app.include_router(agents_router.router)
+app.include_router(connections_router.router)
 app.include_router(suites_router.router)
 app.include_router(runs_router.router)
 app.include_router(freshness_router.router)

@@ -482,3 +482,63 @@ def test_suites_page_degrades_when_backend_down(monkeypatch):
     at.run()
     assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
+
+
+# ------------------------------------------------------------------------------------ v2.2: model connections
+def _connection() -> dict:
+    name = f"UI conn {uuid.uuid4().hex[:6]}"
+    res = requests.post(
+        f"{BACKEND}/connections",
+        json={
+            "name": name,
+            "preset": "ollama",
+            "base_url": "http://localhost:11434/v1",
+            "models": ["tiny-model"],
+        },
+        timeout=10,
+    )
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+def test_models_page_lists_presets_and_connections():
+    conn = _connection()
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    preset = next(s for s in at.selectbox if s.label == "Start from")
+    assert {"ollama", "lmstudio", "openai", "custom"} <= set(preset.options) or len(preset.options) >= 10
+    text = " ".join(m.value for m in at.markdown)
+    assert f"**{conn['name']}**" in text and f"`{conn['model_ids'][0]}`" in text
+    assert "SECRET" not in text
+
+
+def test_models_page_preset_prefills_base_url():
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at.run()
+    next(s for s in at.selectbox if s.label == "Start from").set_value("lmstudio").run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.text_input(key="new_base_url").value == "http://localhost:1234/v1"
+    assert at.text_input(key="new_name").value == "LM Studio"
+
+
+def test_agents_page_offers_connection_models():
+    conn = _connection()
+    at = AppTest.from_file(str(FRONTEND / "pages/1_Agents.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    picker = next(s for s in at.selectbox if s.label == "Model")
+    assert f"🔌 {conn['name']} · tiny-model" in picker.options  # AppTest lists display labels
+    at.session_state["prefill_agent_model"] = conn["model_ids"][0]
+    at.run()
+    assert next(s for s in at.selectbox if s.label == "Model").value == conn["model_ids"][0]
+
+
+def test_models_page_degrades_when_backend_down(monkeypatch):
+    import api
+
+    monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception
+    assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])

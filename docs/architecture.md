@@ -30,6 +30,7 @@
 |---|---|---|
 | **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark, Compare, Traces, Stale-Answer Detector, Reports (`ui.py` helpers, `charts.py` Plotly builders) |
 | **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs, freshness, reports APIs; agent runtime; benchmark engine (scoring, pricing, metrics); stale-answer detector; demo-data seeding |
+| **Model connections** (`routers/connections.py`, `clients/router.py`) | User-added OpenAI-compatible endpoints, called directly. Keys are encrypted at rest (`crypto.py`) and URLs checked by `net_guard.py`. See [models.md](models.md). | Verified live with local Ollama |
 | **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
 | **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer detector. | Verified live (agents and detector) |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
@@ -57,7 +58,8 @@ backend/app/clients/
   search.py       SearchClient protocol, SearchResponse/SearchResult/SearchError, TavilySearchClient
   mock_search.py  MockSearchClient: dated demo corpus (current + stale answers per topic) + generic fallback
   mock_freshness.py  mock replies to the stale-answer detector's extraction/judge prompts
-  __init__.py     clients_for(live) -> (LLM, search) pair; both sets are cached singletons
+  router.py       ModelRouter: custom/<slug>/<model> -> the connection's OpenAI-compatible client, else Bifrost
+  __init__.py     clients_for(live) -> (LLM, search) pair; live LLM = ModelRouter(Bifrost, connections)
 ```
 
 The rest of the code depends only on the `LLMClient` / `SearchClient` protocols, so mock and

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.clients.llm import BifrostClient, LLMClient, LLMError, LLMResponse, ToolCall
+from app.clients.llm import BifrostClient, LLMClient, LLMError, LLMResponse, OpenAICompatibleClient, ToolCall
 from app.clients.mock_llm import MockLLMClient
 from app.clients.mock_search import MockSearchClient
+from app.clients.router import ConnectionRegistry, ModelRouter
 from app.clients.search import SearchClient, SearchError, SearchResponse, SearchResult, TavilySearchClient
 from app.config import get_settings
 
@@ -21,6 +22,8 @@ __all__ = [
     "LLMResponse",
     "MockLLMClient",
     "MockSearchClient",
+    "ModelRouter",
+    "OpenAICompatibleClient",
     "SearchClient",
     "SearchError",
     "SearchResponse",
@@ -48,9 +51,17 @@ def get_mock_search() -> MockSearchClient:
 
 
 @lru_cache
-def get_live_llm() -> BifrostClient:
+def get_bifrost() -> BifrostClient:
     s = get_settings()
     return BifrostClient(s.bifrost_url, timeout_s=s.llm_timeout_s, health_timeout_s=s.health_timeout_s)
+
+
+@lru_cache
+def get_live_llm() -> ModelRouter:
+    """Live LLM traffic: Bifrost for built-in providers, direct clients for user model connections."""
+    from app.db import get_sessionmaker
+
+    return ModelRouter(get_bifrost(), ConnectionRegistry(get_sessionmaker()))
 
 
 @lru_cache

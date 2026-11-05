@@ -135,6 +135,32 @@ Illustrative `/runs/{id}/metrics` leaderboard row (abridged):
 time-sensitive tasks. Executions then carry `freshness_score` and `freshness_verdict`, and the leaderboard rows
 carry `freshness`, `freshness_checked`, `stale_answers`, `stale_rate` and `freshness_verdicts`.
 
+## Model connections
+
+Bring your own model: any OpenAI-compatible endpoint. Agents use `custom/<slug>/<model>`. Details and security:
+[models.md](models.md). On the public demo, every write and test endpoint needs `X-Access-Code`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/connections/presets` | Known endpoints (Ollama, LM Studio, vLLM, llama.cpp, Jan, OpenAI, Anthropic, Gemini, Mistral…) with base URL and whether a key is needed |
+| GET | `/connections` | Connections: `has_api_key` + `key_hint` (never the key), `models`, `model_ids`, last test result, `agents` using it |
+| POST | `/connections` | Add → `201` (`409` name or slug taken; `422` bad or disallowed URL). Body: `name`, `base_url`, `models`, optional `api_key`, `slug`, `preset`, prices per 1M tokens |
+| PUT | `/connections/{id}` | Edit (`api_key` null keeps the stored key; `clear_api_key: true` removes it). The slug never changes. |
+| DELETE | `/connections/{id}` | Delete → `204` (`409` while agents use it) |
+| POST | `/connections/test` | Check an unsaved endpoint: list models, and with `model` a one-word chat plus a tool-calling check |
+| POST | `/connections/{id}/test` | Same with the stored key; records discovered models, tool support and the result |
+
+```bash
+curl -s localhost:8000/connections -H 'content-type: application/json' \
+  -d '{"name": "My Ollama", "base_url": "http://localhost:11434/v1", "models": ["granite4:3b"]}'
+curl -s localhost:8000/connections/1/test -X POST -H 'content-type: application/json' -d '{}'
+curl -s localhost:8000/agents -H 'content-type: application/json' \
+  -d '{"name": "Granite (mine)", "model": "custom/my-ollama/granite4:3b", "tools": ["calculator"]}'
+```
+
+`POST/PUT /agents` reject `custom/<slug>/…` when no connection has that slug (`422`). `GET /models` (live)
+lists connection models together with Bifrost's.
+
 ## Freshness
 
 Stale-answer detection: claims → Tavily → verdict. How it works: [stale-answer-detection.md](stale-answer-detection.md).

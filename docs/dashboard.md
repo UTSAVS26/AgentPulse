@@ -5,6 +5,7 @@ Streamlit app in [`frontend/`](../frontend/). Pages appear in the sidebar in thi
 | Page | What it's for |
 |---|---|
 | **Home** | Overview, a snapshot of the latest finished run (top agents, links to Compare, Traces, Detector and Reports), and system status plus mock/live mode in the sidebar |
+| **🔌 Models** | Bring your own model: connect any OpenAI-compatible endpoint (presets for Ollama, LM Studio, vLLM, OpenAI, Anthropic, Gemini…), fetch its models, test chat and tool calling, then create an agent from it. See [models.md](models.md). |
 | **🤖 Agents** | List, create, edit and delete agents; **try** an agent on one prompt with fault injection and see its trace |
 | **🧪 Suites** | Build your own benchmarks: create, duplicate, import/export (YAML, CSV) suites; edit tasks in a table; test a scorer on a sample answer. Built-ins are read-only. |
 | **🏁 Run Benchmark** | Configure suite × agents × repeats × fault rate, watch live progress, partial leaderboard, all executions |
