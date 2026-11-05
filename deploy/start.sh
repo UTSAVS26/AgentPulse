@@ -29,7 +29,7 @@ wait_for "Bifrost" "http://127.0.0.1:8080/health" 60 || true
 BACKEND_PID=$!
 wait_for "Backend" "http://127.0.0.1:8000/health" 90 || true
 
-# 3) Dashboard: the public port (7860 on Hugging Face Spaces).
+# 3) Dashboard: the public port ($PORT, set by Render; 7860 by default).
 (cd /app/frontend && exec streamlit run app.py \
     --server.port="${PORT:-7860}" --server.address=0.0.0.0 --server.headless=true \
     --server.enableCORS=false --server.enableXsrfProtection=false \

@@ -1,6 +1,6 @@
-"""Smoke test for the Space image, run INSIDE the container (internal ports are not published):
+"""Smoke test for the deploy image, run INSIDE the container (internal ports are not published):
 
-    docker exec <container> python /app/smoke_space.py
+    docker exec <container> python /tmp/smoke_image.py
 
 Checks: dashboard + backend up; public mock mode; seeded data; a full mock benchmark run on
 SQLite; access-code rules (wrong code → 401, right code → live, admin actions need the code).

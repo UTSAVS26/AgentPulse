@@ -2,6 +2,21 @@
 
 All notable changes per build phase.
 
+## [Deploy] Switch hosting to Render
+
+Hugging Face now requires a paid plan for Docker Spaces, so the deployment moved to a **free Render Docker web service**.
+
+### Changed
+- `render.yaml` Blueprint: one free Docker web service. It deploys `main` **only after GitHub CI checks pass** (`autoDeployTrigger: checksPass`), and secrets are prompted at setup (`sync: false`), never committed.
+- The single-container image moved to `deploy/Dockerfile` + `deploy/start.sh`, built straight from the repo root (root `.dockerignore` keeps `.env`, `.git`, `.venv` and tests out). The dashboard listens on the platform's `$PORT`.
+- `bifrost/config.space.json` → `bifrost/config.cloud.json`. Make targets `space-*` → `image-build`, `image-smoke`, `image-live`, `image-stop`. CI job → **Deploy image (build + smoke test)**.
+
+### Removed
+- Hugging Face deploy workflow and scripts (`deploy.yml`, `build_space.py`, `deploy_space.py`), the Space card, and the `huggingface_hub` dev dependency. The `HF_*` GitHub secrets are no longer used.
+
+### Verified
+- The image runs on Render's default port (`PORT=10000`) at about 290 MB RAM (512 MB free-plan limit) and passes all 12 smoke checks.
+
 ## [Deploy] Hugging Face Space auto-deploy + public demo mode
 
 ### Added

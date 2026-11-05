@@ -1,12 +1,14 @@
-# Deployment (Hugging Face Spaces, auto-deploy)
+# Deployment (Render, auto-deploy)
 
-Every push to `main` that passes CI is deployed automatically to a public **Hugging Face Space**:
+AgentPulse deploys as **one free Docker web service on [Render](https://render.com)**, defined in
+[`render.yaml`](../render.yaml). Every push to `main` is deployed automatically **after the GitHub CI checks pass**
+(`autoDeployTrigger: checksPass`), so a red build never reaches the public URL.
 
 ```
-push to main ─▶ CI (lint · tests · Docker stack + UI tests · Space image smoke test)
-                  │ all green
+push to main ─▶ GitHub CI (lint · tests · Docker stack + UI tests · deploy-image smoke test)
+                  │ all checks green
                   ▼
-             Deploy workflow ─▶ build dist/space ─▶ sync secrets ─▶ upload ─▶ wait for RUNNING ─▶ check URL
+             Render builds deploy/Dockerfile ─▶ health check /_stcore/health ─▶ switches traffic to the new version
 ```
 
 ## How the public demo behaves
@@ -16,78 +18,95 @@ push to main ─▶ CI (lint · tests · Docker stack + UI tests · Space image 
 | Anyone | **Mock** (default) | The full product with simulated models and search. Costs nothing, can't drain your API credits. |
 | Someone with the **access code** (sidebar → 🔒 *Unlock live mode*) | **Live** | Real models via Bifrost (Groq, OpenRouter) and live Tavily search, with your keys |
 
-On the public deployment, **editing or deleting agents, deleting suites or runs, and cancelling runs also need the code**,
-so visitors can't wipe the demo. Creating agents and starting mock runs is open to everyone.
+On the public deployment, editing or deleting agents, deleting suites or runs, and cancelling runs also need the
+code, so visitors can't wipe the demo. Each benchmark run records the mode it ran in.
 
-Each benchmark run records the mode it ran in, and the run list shows `mock` or `live`.
+## What runs in the container
 
-## Architecture of the Space
-
-Hugging Face runs one container, so [`deploy/space/`](../deploy/space/) packs all three services into it:
+[`deploy/Dockerfile`](../deploy/Dockerfile) packs everything into one container (about 230–290 MB RAM, which fits
+the free plan's 512 MB):
 
 ```
 container (uid 1000)
-├── bifrost      127.0.0.1:8080   static binary copied from the pinned official image; config: bifrost/config.space.json
+├── bifrost      127.0.0.1:8080   static binary from the pinned official image; config: bifrost/config.cloud.json
 ├── uvicorn      127.0.0.1:8000   FastAPI backend (SQLite in /tmp, or Postgres via DATABASE_URL)
-└── streamlit    0.0.0.0:7860     dashboard: the only public port
+└── streamlit    0.0.0.0:$PORT    dashboard: the only public port (Render sets PORT)
 ```
 
-`start.sh` starts them in order, waits for each to be healthy, and exits if any of them dies so the platform
-restarts the container. The cloud Bifrost config has **no Ollama provider**, so the local-Ollama agent returns a
+[`deploy/start.sh`](../deploy/start.sh) starts them in order and exits if any of them dies, so the platform
+restarts the container. The cloud Bifrost config has **no Ollama provider**, so the local-model agent returns a
 clean "provider not configured" error in live mode.
 
 ## One-time setup (about 10 minutes)
 
-1. **Hugging Face account and token**
-   - Sign up at https://huggingface.co.
-   - Go to **Settings → Access Tokens → Create new token**, type **Write**, and copy it.
-2. **GitHub repository secrets**: repo → **Settings → Secrets and variables → Actions → New repository secret**:
+1. **Sign up** at https://dashboard.render.com with **GitHub**.
+2. Go to **New + → Blueprint**, connect the `UTSAVS26/AgentPulse` repository (grant Render access if asked), and pick branch `main`.
+   Render reads `render.yaml` and shows one service: **agentpulse** (free, Docker).
+3. Render **prompts for the secret values** (they are `sync: false`, so they never live in git):
 
-   | Secret | Required | Value |
-   |---|---|---|
-   | `HF_TOKEN` | ✅ | The write token from step 1 |
-   | `HF_SPACE` | ✅ | `<your-hf-username>/agentpulse` (the Space is created on first deploy) |
-   | `LIVE_ACCESS_CODE` | for live mode | A long random code you share only with judges (e.g. from `python -c "import secrets;print(secrets.token_urlsafe(12))"`) |
-   | `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TAVILY_API_KEY` | for live mode | Your keys. Synced to the Space as **secrets**, never uploaded as files. |
-   | `DATABASE_URL` | optional | A Postgres URL (e.g. a free [Neon](https://neon.tech) database) so data survives Space restarts. `postgres://` and `postgresql://` URLs are accepted as-is. |
+   | Key | Value |
+   |---|---|
+   | `LIVE_ACCESS_CODE` | A code you choose and share only with judges, e.g. `python -c "import secrets;print(secrets.token_urlsafe(12))"`. Leave empty for a mock-only demo. |
+   | `GROQ_API_KEY` | From your `.env` |
+   | `OPENROUTER_API_KEY` | From your `.env` |
+   | `TAVILY_API_KEY` | From your `.env` |
 
-3. **Deploy:** push to `main`, or go to **Actions → Deploy (Hugging Face Space) → Run workflow**.
-   The first build takes about 5–8 minutes. The workflow summary shows the URL:
-   `https://<hf-username>-agentpulse.hf.space` (also at `https://huggingface.co/spaces/<hf-username>/agentpulse`).
+4. Click **Apply**. The first build takes about 5–10 minutes. Your URL is shown on the service page,
+   e.g. **`https://agentpulse.onrender.com`** (Render adds a suffix if that name is taken).
 
-Without `HF_TOKEN`/`HF_SPACE`, the deploy workflow logs a notice and does nothing, so forks don't fail.
+That's all. Nothing needs to be configured in GitHub for deploys.
 
-## Test the Space image locally (before pushing)
+### Optional: persistent data
+
+The free disk is ephemeral, so SQLite data (runs, custom agents) resets on every deploy or restart. To keep it,
+add **`DATABASE_URL`** in Render → service → **Environment**, pointing to a free Postgres (e.g. [Neon](https://neon.tech)).
+`postgres://` and `postgresql://` URLs work as-is.
+
+## Checking a deploy
+
+- **Render dashboard → agentpulse → Events:** each deploy with its commit, status (*Build in progress → Deploy live*), and failures.
+- **Logs** tab: the container output. A healthy start shows:
+  ```
+  [start] Bifrost is up
+  [start] Backend is up
+  [start] public demo: mock by default, live mode unlocked by access code
+  ```
+- **GitHub:** the commit's checks must be green first. Render waits for them before deploying.
+- **The app:** open the URL. The sidebar shows **MOCK MODE**, and *Unlock live mode* with your code switches it to **LIVE MODE**.
+
+## Changing secrets
+
+Render → agentpulse → **Environment** → edit the value → **Save changes**. Render redeploys with the new value.
+For example, change `LIVE_ACCESS_CODE` to revoke an old code.
+
+## Test the deploy image locally (before pushing)
 
 ```bash
-make space-smoke     # build dist/space, run it like Hugging Face (port 7860, uid 1000), 12 smoke checks
-                     # leaves it running with the TEST code "smoke-test-code" and NO real keys
-make space-live      # (re)start the image with your .env keys; unlock code "letmein"
-make space-live SPACE_CODE=my-code   # ...or choose the code
-make space-stop      # stop and remove it
+make image-smoke     # build deploy/Dockerfile, run it like the cloud does, 12 smoke checks
+                     # leaves it running on :7860 with the TEST code "smoke-test-code" and NO real keys
+make image-live      # (re)start it with your .env keys; unlock code "letmein"
+make image-live LIVE_CODE=my-code
+make image-stop      # stop and remove it
 ```
 
-Open http://localhost:7860, then use the sidebar's **🔒 Unlock live mode** with the code that the command printed.
-Only one container can use port 7860, and each `space-*` target replaces the previous one. If the code is
-rejected, check which target you ran last.
+Only one container can use port 7860, and each `image-*` target replaces the previous one. The CI job
+**"Deploy image (build + smoke test)"** runs `make image-smoke` on every push.
 
-The CI job **"Hugging Face Space image"** runs `make space-smoke` on every push, so a broken image never reaches
-the deploy step.
-
-## Limits of the free Space
+## Free plan limits
 
 | Limit | Effect | Mitigation |
 |---|---|---|
-| Sleeps after ~48 h without visitors | First visit after sleeping takes about 1 min to wake | Open the URL a few minutes before demoing |
-| Ephemeral disk | SQLite data (runs, custom agents) resets on restart or redeploy | Set `DATABASE_URL` to a free Postgres |
-| 2 vCPU / 16 GB | Mock runs are fast; live runs are bound by provider rate limits, not the Space | — |
+| Spins down after ~15 min without traffic | The next visit takes about 1 minute to wake up | Open the URL a few minutes before demoing |
+| 0.1 CPU, 512 MB RAM | Page loads are slower than locally. Benchmarks are mostly network-bound, so they're fine. | — |
+| Ephemeral disk | Data resets on deploy or restart | Set `DATABASE_URL` |
 | No Ollama | The local-model agent errors in live mode | Use it locally |
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Deploy job: `Space failed with stage BUILD_ERROR` | Open the Space → **Logs → Build**. Reproduce locally with `make space-smoke`. |
-| Deploy job: `401` / `403` from Hugging Face | `HF_TOKEN` must be a **Write** token belonging to the owner of `HF_SPACE` |
-| "Unlock live mode" says *Invalid access code* | On the Space: the `LIVE_ACCESS_CODE` secret isn't set, or differs from what you typed. Re-run the deploy after changing secrets. Locally: the container on port 7860 is from a different `make space-*` run (`space-smoke` uses `smoke-test-code`, `space-live` uses `letmein`). |
-| Live runs fail with `no keys found that support model` | The provider key secret is missing. Add it and re-run the deploy, which re-syncs secrets and restarts the Space. |
+| Render never deploys after a push | The GitHub checks on that commit must all pass. If Render still waits, set **Settings → Auto-Deploy → On Commit**. |
+| Build fails | Render → **Events** → the failed deploy → build log. Reproduce locally with `make image-smoke`. |
+| Deploy fails the health check | **Logs** tab. Look for which `[start]` service didn't come up. |
+| *Invalid access code* when unlocking | `LIVE_ACCESS_CODE` isn't set or differs on Render. Locally, the container on :7860 is from a different `make image-*` run (`image-smoke` uses `smoke-test-code`, `image-live` uses `letmein`). |
+| Live runs fail with `no keys found that support model` | The provider key is missing in Render → Environment |

@@ -1,0 +1,18 @@
+# Build context for deploy/Dockerfile (repo root). Keep it small and secret-free.
+.env
+.env.*
+!.env.example
+.git
+.github
+.venv
+venv
+dist
+docs
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+backend/tests
+frontend/tests
+bifrost/*.db
+bifrost/config.schema.json

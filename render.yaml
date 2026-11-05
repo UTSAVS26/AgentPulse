@@ -1,0 +1,27 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# One free Docker web service running the whole app (Bifrost + API + dashboard, ~230 MB RAM).
+# Auto-deploys from main only after the GitHub CI checks pass (autoDeployTrigger: checksPass).
+services:
+  - type: web
+    name: agentpulse
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    healthCheckPath: /_stcore/health
+    autoDeployTrigger: checksPass
+    envVars:
+      # Public demo: mock for everyone; the access code unlocks live mode (real Bifrost + Tavily).
+      - key: MOCK_MODE
+        value: "true"
+      # The secrets below are prompted for when the Blueprint is created (sync: false = never in git).
+      - key: LIVE_ACCESS_CODE
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false

@@ -105,8 +105,8 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  space-image:
-    name: Hugging Face Space image (build + smoke test)
+  deploy-image:
+    name: Deploy image (build + smoke test)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [lint]
@@ -121,19 +121,19 @@ jobs:
             frontend/requirements.txt
       - name: Install dev dependencies (make setup)
         run: make setup
-      - name: Build the single-container image and smoke-test it like Hugging Face runs it (make space-smoke)
-        run: make space-smoke
+      - name: Build the single-container deploy image and smoke-test it (make image-smoke)
+        run: make image-smoke
       - name: Container logs must not contain tracebacks
         run: |
-          if docker logs agentpulse-space 2>&1 | grep -E "Traceback|Exception in" ; then
-            echo "::error::Unexpected exception in Space container logs"; exit 1
+          if docker logs agentpulse-app 2>&1 | grep -E "Traceback|Exception in" ; then
+            echo "::error::Unexpected exception in deploy image logs"; exit 1
           fi
       - name: Dump logs on failure
         if: failure()
-        run: docker logs --tail=300 agentpulse-space || true
+        run: docker logs --tail=300 agentpulse-app || true
       - name: Clean up
         if: always()
-        run: docker rm -f agentpulse-space || true
+        run: docker rm -f agentpulse-app || true
 
   live-check:
     name: Live integration check (manual)
