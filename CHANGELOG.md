@@ -13,6 +13,7 @@ All notable changes per build phase.
 - Docs: `docs/ci.md`, CI badge in README.
 
 ### Fixed
+- **Pricing was never loaded on a recently booted machine** (found by CI). `PriceBook` treated "never refreshed" as `monotonic() == 0`, and `time.monotonic()` counts from boot on Linux, so within the first hour after boot costs fell back to the snapshot or $0. It now refreshes on first use, re-checks after the TTL, and retries 60 s after a failed fetch (instead of 1 h). Regression tests fake a freshly booted clock.
 - The Run Benchmark UI test assumed no other run is started while it waits; it now selects its own run explicitly and starts a concurrent run on purpose to cover that case.
 
 ## [Phase 3] Benchmark engine, scoring & metrics

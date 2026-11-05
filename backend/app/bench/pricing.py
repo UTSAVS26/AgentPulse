@@ -49,11 +49,18 @@ class PriceBook:
         self.ttl_s = ttl_s
         self.timeout_s = timeout_s
         self._catalogue: dict[str, Price] = {}
-        self._loaded_at = 0.0
+        # None = never attempted. (Don't use 0.0: time.monotonic() counts from boot on Linux, so a
+        # freshly booted machine would look "recently refreshed" and never load prices.)
+        self._next_refresh_at: float | None = None
         self._lock = threading.Lock()
 
+    retry_after_failure_s: float = 60.0
+
     def _refresh(self) -> None:
-        if not self.bifrost_url or time.monotonic() - self._loaded_at < self.ttl_s:
+        if not self.bifrost_url:
+            return
+        now = time.monotonic()
+        if self._next_refresh_at is not None and now < self._next_refresh_at:
             return
         try:
             res = httpx.get(f"{self.bifrost_url}/v1/models", timeout=self.timeout_s)
@@ -64,10 +71,12 @@ class PriceBook:
                 if "prompt" in p and "completion" in p:
                     catalogue[m["id"]] = Price(float(p["prompt"]), float(p["completion"]), "bifrost")
             self._catalogue = catalogue
+            self._next_refresh_at = now + self.ttl_s
             log.info("Loaded pricing for %d models from Bifrost", len(catalogue))
         except (httpx.HTTPError, ValueError, KeyError) as exc:
+            # Retry soon (e.g. Bifrost still starting), but don't hammer the gateway on every call.
+            self._next_refresh_at = now + self.retry_after_failure_s
             log.warning("Could not load pricing from Bifrost (%s); using snapshot", exc)
-        self._loaded_at = time.monotonic()  # don't hammer the gateway on failure either
 
     def price(self, model: str) -> Price:
         with self._lock:

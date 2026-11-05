@@ -293,3 +293,57 @@ def test_add_missing_columns_upgrades_old_schema(tmp_path):
     assert "stale_answer" in {c["name"] for c in inspect(old).get_columns("tasks")}
     assert add_missing_columns(old) == []  # idempotent
     old.dispose()
+
+
+def _catalogue_response(price="0.000001"):
+    body = {"data": [{"id": "groq/x", "pricing": {"prompt": price, "completion": "0.000002"}}]}
+    return httpx.Response(200, json=body, request=httpx.Request("GET", "http://b"))
+
+
+def test_pricebook_loads_on_freshly_booted_machine(monkeypatch):
+    """Regression: time.monotonic() starts near 0 after boot (Linux CI runners). The first lookup
+    must still fetch the catalogue."""
+    import app.bench.pricing as pricing
+
+    monkeypatch.setattr(pricing.time, "monotonic", lambda: 5.0)  # 5 s after boot
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _catalogue_response())
+    assert PriceBook("http://bifrost:8080").price("groq/x").source == "bifrost"
+
+
+def test_pricebook_caches_then_refreshes_after_ttl_and_retries_soon_after_failure(monkeypatch):
+    import app.bench.pricing as pricing
+
+    clock = {"t": 100.0}
+    calls = {"n": 0}
+    responses = []
+
+    def fake_get(*a, **k):
+        calls["n"] += 1
+        r = responses.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+    monkeypatch.setattr(pricing.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(httpx, "get", fake_get)
+    book = PriceBook("http://bifrost:8080", ttl_s=3600)
+
+    responses.append(httpx.ConnectError("bifrost starting"))
+    assert book.price("groq/x").source == "unknown"  # failed load -> fallback
+    clock["t"] += 30
+    book.price("groq/x")
+    assert calls["n"] == 1  # no hammering within the retry window
+
+    clock["t"] += 31  # > 60 s after the failure
+    responses.append(_catalogue_response("0.000001"))
+    assert book.price("groq/x").input_per_token == pytest.approx(1e-6)
+    assert calls["n"] == 2
+
+    clock["t"] += 3599
+    book.price("groq/x")
+    assert calls["n"] == 2  # cached within TTL
+
+    clock["t"] += 2
+    responses.append(_catalogue_response("0.000005"))
+    assert book.price("groq/x").input_per_token == pytest.approx(5e-6)  # refreshed after TTL
+    assert calls["n"] == 3
