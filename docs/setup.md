@@ -1,0 +1,138 @@
+# Setup & configuration
+
+## Prerequisites
+
+| Tool | Version tested | Notes |
+|---|---|---|
+| Docker Desktop | 29.x | Must be running before `docker compose up` |
+| Python | 3.12+ (3.13 works locally) | Only needed to run tests and lint outside Docker |
+| Ollama | optional | For local open-source models |
+| GNU Make | 4.x | Optional shortcut runner. Windows: `choco install make`. Every `make` target below shows its raw command too. |
+
+## 1. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MOCK_MODE` | `true` | `true`: simulated LLM and search (no keys, works offline). `false`: real Bifrost and Tavily calls. |
+| `GROQ_API_KEY` | – | Groq models via Bifrost (`groq/<model>`). Get one at https://console.groq.com |
+| `OPENROUTER_API_KEY` | – | OpenRouter models via Bifrost (`openrouter/<model>`). Get one at https://openrouter.ai |
+| `OLLAMA_URL` | `http://host.docker.internal:11434` | Where Bifrost reaches Ollama on your host |
+| `TAVILY_API_KEY` | – | Live web search and claim verification. Get one at https://tavily.com |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `agentpulse` | Database credentials |
+| `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `60` / `20` | Outbound request timeouts |
+
+Provider keys are read **only by Bifrost** (see `bifrost/config.json`, which uses `env.` references). The backend never sees them.
+
+## 2. Start the stack
+
+```bash
+make up                  # = docker compose up --build -d --wait && docker compose ps
+                         # all 4 services should show (healthy)
+```
+
+`--wait` blocks until every healthcheck passes. Startup order is enforced:
+`postgres` + `bifrost` → `backend` → `frontend`.
+
+## 3. Verify
+
+```bash
+make health
+# curl http://localhost:8000/health   -> {"status":"ok","version":"0.1.0","mock_mode":true}
+# curl http://localhost:8080/health   -> {"components":{"db_pings":"ok"},"status":"ok"}
+# curl http://localhost:8501/_stcore/health -> ok
+```
+
+Open http://localhost:8501. The sidebar shows **Backend online** and the current mode.
+
+## Using local models with Ollama
+
+1. Install Ollama and start it (`ollama serve`, or launch the desktop app).
+2. Pull a model, e.g. `ollama pull granite4:3b` (small and fast) or `ollama pull qwen3.5:9b` (better at tool calling).
+3. Test through Bifrost with `make ollama-test` (or `make ollama-test OLLAMA_MODEL=qwen3.5:9b`), or with raw curl:
+   ```bash
+   curl localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+     -d '{"model":"ollama/granite4:3b","messages":[{"role":"user","content":"Reply with: pong"}]}'
+   ```
+   The first call loads the model into memory and can take 5–30 s.
+
+## Testing cloud providers (Groq / OpenRouter)
+
+After putting keys in `.env`, reload Bifrost so it picks them up:
+
+```bash
+docker compose up -d --force-recreate --wait bifrost
+```
+
+List every model your keys can reach (Bifrost aggregates all providers):
+
+```bash
+curl -s localhost:8080/v1/models
+```
+
+Easiest (works in every shell):
+
+```bash
+make models                                              # list reachable models
+make llm-test MODEL=groq/openai/gpt-oss-20b
+make llm-test MODEL=openrouter/nvidia/nemotron-3.5-lightning:free
+```
+
+Raw curl also works, but **the quoting differs by shell:**
+
+```bash
+# Git Bash / macOS / Linux
+curl -s localhost:8080/v1/chat/completions -H "content-type: application/json" \
+  -d '{"model":"groq/openai/gpt-oss-20b","messages":[{"role":"user","content":"Reply with: pong"}]}'
+```
+
+```powershell
+# PowerShell
+curl.exe -s localhost:8080/v1/chat/completions -H "content-type: application/json" -d '{\"model\":\"groq/openai/gpt-oss-20b\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with: pong\"}]}'
+```
+
+Models verified on 2026-11-05 (provider catalogs change; check `/v1/models` if one disappears):
+
+| Model id | Notes |
+|---|---|
+| `groq/openai/gpt-oss-20b` | Fast, ~500 ms |
+| `groq/openai/gpt-oss-120b` | Larger, ~550 ms |
+| `groq/qwen/qwen3.8-27b` | Fastest in testing, ~150 ms |
+| `openrouter/nvidia/nemotron-3.5-lightning:free` | Free tier, ~2 s |
+| `openrouter/google/gemma-4-31b-it:free` | Free tier, often rate-limited (429) upstream |
+| `ollama/granite4:3b`, `ollama/qwen3.5:9b` | Local, cost $0 |
+
+Free OpenRouter models are rate-limited. A `429` means "retry later", not a configuration error.
+
+## Switching between mock and live mode
+
+Either edit `MOCK_MODE` in `.env` and run `make restart`, or override it for one start:
+
+```bash
+make up-live   # MOCK_MODE=false for this start, ignoring .env
+make up        # back to whatever .env says
+```
+
+## Stopping / resetting
+
+```bash
+make down      # = docker compose down     (stop, keep data)
+make reset     # = docker compose down -v  (stop and wipe the database + Bifrost state)
+```
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker Desktop isn't running. Start it and wait until it shows "Engine running". |
+| Bifrost: `Invalid request payload` | The JSON body was mangled by shell quoting. Use the variant for your shell from "Testing cloud providers". |
+| Provider: `model_not_found` / `model is unavailable` | The model id is outdated. Pick a current one from `curl -s localhost:8080/v1/models`. |
+| Bifrost: `no keys found that support model` | The provider key for that model is empty in `.env`. Add it and run `docker compose up -d --force-recreate bifrost`. |
+| Bifrost: `virtual key is required` | `enforce_auth_on_inference` was turned back on in `bifrost/config.json`. It is `false` for local use. |
+| Bifrost → Ollama: `connection refused` / `network is unreachable` | Ollama isn't running on the host. Start it with `ollama serve`. |
+| Bifrost → Ollama: `connection to private IP ... is not allowed` | `network_config.allow_private_network` is missing from the `ollama` provider in `bifrost/config.json`. |
+| Port already in use (5432/8000/8080/8501) | Stop the conflicting service, or change the left side of the port mapping in `docker-compose.yml`. |
+| Dashboard says "Cannot reach the backend" | `docker compose logs backend` |

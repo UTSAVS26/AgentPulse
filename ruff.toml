@@ -1,0 +1,11 @@
+line-length = 110
+target-version = "py312"
+src = ["backend", "frontend"]
+extend-exclude = [".venv"]
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+ignore = ["B008"]  # FastAPI Depends() in argument defaults is idiomatic
+
+[lint.isort]
+known-first-party = ["app", "api"]

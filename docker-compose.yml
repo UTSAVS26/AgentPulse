@@ -1,0 +1,69 @@
+name: agentpulse
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentpulse}
+      POSTGRES_DB: ${POSTGRES_DB:-agentpulse}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  bifrost:
+    # Pinned by digest so the demo runs exactly what was tested.
+    image: maximhq/bifrost@sha256:a1c90607dcfd13c1fb2f9476ceb3bb24407a50ade7fdf3e61a59fb42b09e5c57
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    volumes:
+      - bifrost-data:/app/data
+      - ./bifrost/config.json:/app/data/config.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment:
+      MOCK_MODE: ${MOCK_MODE:-true}
+      BIFROST_URL: http://bifrost:8080
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agentpulse}:${POSTGRES_PASSWORD:-agentpulse}@postgres:5432/${POSTGRES_DB:-agentpulse}
+      LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-60}
+      SEARCH_TIMEOUT_S: ${SEARCH_TIMEOUT_S:-20}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bifrost:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+
+volumes:
+  pgdata:
+  bifrost-data:
