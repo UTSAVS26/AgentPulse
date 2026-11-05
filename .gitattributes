@@ -1,0 +1,4 @@
+# Normalise line endings: the Makefile, shell steps and Docker builds expect LF.
+* text=auto eol=lf
+*.png binary
+*.jpg binary

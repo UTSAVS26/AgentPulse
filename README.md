@@ -1,5 +1,7 @@
 # AgentPulse
 
+[![CI](https://github.com/UTSAVS26/AgentPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/UTSAVS26/AgentPulse/actions/workflows/ci.yml)
+
 **AI agent benchmarking & reliability platform** with built-in **stale-answer detection**.
 
 > Global AI Hackathon – Geek Room · Bifrost challenge (agent benchmarking) + Tavily challenge (stale-answer detector)
@@ -46,6 +48,7 @@ Full instructions, API keys, Ollama setup and troubleshooting: **[docs/setup.md]
 - [Agents](docs/agents.md): agent definition, default agents, tools, runtime loop, fault injection
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula and the reliability score
+- [Continuous integration](docs/ci.md): what runs on every push and how to run it locally
 - [API reference](docs/api.md): endpoints with curl examples (full spec at http://localhost:8000/docs)
 
 ## Repository layout
@@ -72,4 +75,5 @@ docs/        Project documentation
 | `make db-tables` | List PostgreSQL tables |
 | `make test` / `make lint` / `make format` | Tests / lint check / auto-fix |
 | `make ui-test` | Render dashboard pages against the running stack (needs `make up`) |
-| `make check` | Lint + tests. **Run before every commit.** |
+| `make validate-config` | Validate `bifrost/config.json` against Bifrost's JSON schema |
+| `make check` | Lint + config validation + tests (what CI runs). **Run before every commit.** |

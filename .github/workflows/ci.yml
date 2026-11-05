@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      live_check:
+        description: "Also run the LIVE integration check (needs repo secrets GROQ_API_KEY, OPENROUTER_API_KEY, TAVILY_API_KEY; spends a few API credits)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"  # same as the Docker images
+
+jobs:
+  lint:
+    name: Lint & config validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements*.txt
+            frontend/requirements.txt
+      - name: Install dev dependencies (make setup)
+        run: make setup
+      - name: Ruff lint + format check (make lint)
+        run: make lint
+      - name: Validate bifrost/config.json against Bifrost's JSON schema
+        run: .venv/bin/python scripts/validate_bifrost_config.py
+      - name: Validate docker-compose.yml
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements*.txt
+            frontend/requirements.txt
+      - name: Install dev dependencies (make setup)
+        run: make setup
+      - name: Pytest, warnings as errors (make test)
+        run: make test
+
+  stack:
+    name: Docker stack + dashboard tests (mock mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements*.txt
+            frontend/requirements.txt
+      - name: Install dev dependencies (make setup)
+        run: make setup
+      - name: Build and start the stack (make up)
+        env:
+          MOCK_MODE: "true"
+        run: make up
+      - name: Health checks (make health)
+        run: |
+          make health
+          curl -sf localhost:8000/health | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='ok' and d['mock_mode'], d; print('backend ok:', d)"
+      - name: Seeded data present
+        run: |
+          curl -sf localhost:8000/agents | python3 -c "import json,sys; n=len(json.load(sys.stdin)); assert n==6, n; print(n, 'agents')"
+          curl -sf localhost:8000/suites | python3 -c "import json,sys; s=json.load(sys.stdin); assert len(s)==3, s; print([x['name'] for x in s])"
+      - name: Dashboard tests against the running stack (make ui-test)
+        run: make ui-test
+      - name: Container logs must not contain tracebacks
+        run: |
+          if docker compose logs backend frontend 2>&1 | grep -E "Traceback|Exception in" ; then
+            echo "::error::Unexpected exception in container logs"; exit 1
+          fi
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=300
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  live-check:
+    name: Live integration check (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.live_check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [stack]
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      MOCK_MODE: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets are configured
+        run: |
+          for k in GROQ_API_KEY OPENROUTER_API_KEY TAVILY_API_KEY; do
+            if [ -z "${!k}" ]; then echo "::error::Repository secret $k is not set"; exit 1; fi
+          done
+      - name: Start the stack in live mode
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait
+      - name: Live check (cloud providers + tool calling + Tavily; no local Ollama in CI)
+        run: >-
+          docker compose exec -T backend python -m app.scripts.live_check
+          --models groq/openai/gpt-oss-20b openrouter/nvidia/nemotron-3.5-lightning:free
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=300
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

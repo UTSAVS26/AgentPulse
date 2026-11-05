@@ -2,6 +2,19 @@
 
 All notable changes per build phase.
 
+## [CI] Continuous integration
+
+### Added
+- GitHub Actions workflow (`.github/workflows/ci.yml`) on every push and pull request:
+  lint + Bifrost config schema validation + compose validation · backend tests · full Docker stack in mock mode with health checks, seed checks, dashboard (AppTest) tests and a log scan for tracebacks.
+  An optional **live** integration check runs manually (`workflow_dispatch`) using repository secrets.
+- `scripts/validate_bifrost_config.py` + committed schema snapshot `bifrost/config.schema.json` (offline fallback); `make validate-config`, now part of `make check`.
+- `.gitattributes` enforcing LF line endings (the Makefile and Docker builds need them).
+- Docs: `docs/ci.md`, CI badge in README.
+
+### Fixed
+- The Run Benchmark UI test assumed no other run is started while it waits; it now selects its own run explicitly and starts a concurrent run on purpose to cover that case.
+
 ## [Phase 3] Benchmark engine, scoring & metrics
 
 ### Added
