@@ -1,0 +1,32 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "source_of_truth": "config.json",
+  "disable_onboarding": true,
+  "client": {
+    "drop_excess_requests": false,
+    "enable_logging": false,
+    "enforce_auth_on_inference": false
+  },
+  "providers": {
+    "groq": {
+      "keys": [
+        {
+          "name": "groq-primary",
+          "value": "env.GROQ_API_KEY",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ]
+    },
+    "openrouter": {
+      "keys": [
+        {
+          "name": "openrouter-primary",
+          "value": "env.OPENROUTER_API_KEY",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ]
+    }
+  }
+}

@@ -13,10 +13,11 @@ endif
 COMPOSE := docker compose
 OLLAMA_MODEL ?= granite4:3b
 MODEL ?= groq/openai/gpt-oss-20b
+SPACE_CODE ?= letmein
 
 .DEFAULT_GOAL := help
 .PHONY: help setup env up up-live down reset restart build logs ps health ollama-test llm-test models live-check db-tables \
-        test ui-test lint format check validate-config
+        test ui-test lint format check validate-config space-build space-run space-smoke space-live space-stop
 
 help:
 	$(info AgentPulse - available commands)
@@ -46,7 +47,13 @@ help:
 	$(info     make lint         Ruff lint + format check)
 	$(info     make format       Auto-fix lint issues and format code)
 	$(info     make ui-test      Render dashboard pages against the running stack (needs make up))
-	$(info     make validate-config  Validate bifrost/config.json against the Bifrost JSON schema)
+	$(info     make validate-config  Validate both Bifrost configs against the Bifrost JSON schema)
+	$(info )
+	$(info   Deployment (Hugging Face Space image))
+	$(info     make space-build  Assemble dist/space and build the single-container image)
+	$(info     make space-smoke  Build, run like Hugging Face (port 7860, uid 1000) and smoke-test it)
+	$(info     make space-live   Run the Space image with your .env keys; unlock code SPACE_CODE=$(SPACE_CODE))
+	$(info     make space-stop   Stop and remove the local Space container)
 	$(info     make check        lint + config validation + tests (same as CI; run before every commit))
 	@:
 
@@ -123,6 +130,32 @@ ui-test:
 	$(PY) -m pytest frontend -q
 
 validate-config:
-	$(PY) scripts/validate_bifrost_config.py
+	$(PY) scripts/validate_bifrost_config.py bifrost/config.json
+	$(PY) scripts/validate_bifrost_config.py bifrost/config.space.json
+
+space-build:
+	$(PY) scripts/build_space.py
+	docker build -t agentpulse-space dist/space
+
+space-run: space-build
+	-docker rm -f agentpulse-space
+	docker run -d --name agentpulse-space -p 7860:7860 -e LIVE_ACCESS_CODE=smoke-test-code agentpulse-space
+	$(PY) scripts/wait_healthy.py agentpulse-space 180
+
+space-smoke: space-run
+	docker cp scripts/smoke_space.py agentpulse-space:/tmp/smoke_space.py
+	docker exec agentpulse-space python /tmp/smoke_space.py
+	@echo Space container still running at http://localhost:7860 - access code: smoke-test-code - no real API keys.
+	@echo Stop it with: make space-stop.  Try live mode with your .env keys: make space-live
+
+space-live: space-build
+	-docker rm -f agentpulse-space
+	docker run -d --name agentpulse-space -p 7860:7860 --env-file .env -e MOCK_MODE=true -e LIVE_ACCESS_CODE=$(SPACE_CODE) agentpulse-space
+	$(PY) scripts/wait_healthy.py agentpulse-space 180
+	@echo Open http://localhost:7860, then sidebar, Unlock live mode, access code: $(SPACE_CODE)
+	@echo Uses the API keys from .env. Stop with: make space-stop
+
+space-stop:
+	-docker rm -f agentpulse-space
 
 check: lint validate-config test

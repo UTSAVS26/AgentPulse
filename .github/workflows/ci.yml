@@ -38,8 +38,8 @@ jobs:
         run: make setup
       - name: Ruff lint + format check (make lint)
         run: make lint
-      - name: Validate bifrost/config.json against Bifrost's JSON schema
-        run: .venv/bin/python scripts/validate_bifrost_config.py
+      - name: Validate both Bifrost configs against Bifrost's JSON schema (make validate-config)
+        run: make validate-config
       - name: Validate docker-compose.yml
         run: |
           cp .env.example .env
@@ -104,6 +104,36 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  space-image:
+    name: Hugging Face Space image (build + smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements*.txt
+            frontend/requirements.txt
+      - name: Install dev dependencies (make setup)
+        run: make setup
+      - name: Build the single-container image and smoke-test it like Hugging Face runs it (make space-smoke)
+        run: make space-smoke
+      - name: Container logs must not contain tracebacks
+        run: |
+          if docker logs agentpulse-space 2>&1 | grep -E "Traceback|Exception in" ; then
+            echo "::error::Unexpected exception in Space container logs"; exit 1
+          fi
+      - name: Dump logs on failure
+        if: failure()
+        run: docker logs --tail=300 agentpulse-space || true
+      - name: Clean up
+        if: always()
+        run: docker rm -f agentpulse-space || true
 
   live-check:
     name: Live integration check (manual)

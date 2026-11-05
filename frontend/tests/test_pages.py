@@ -154,3 +154,47 @@ def test_run_benchmark_page_degrades_when_backend_down(monkeypatch):
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("Cannot reach the backend" in e.value for e in at.error)
+
+
+def test_public_deployment_access_code_unlock_flow(monkeypatch):
+    """Simulated public deployment: mock by default; a wrong code shows an error; the right code
+    unlocks live mode and is then sent with every request."""
+    import api
+
+    sent_codes = []
+
+    def fake_health(code=None):
+        code = code or api.access_code()
+        sent_codes.append(code)
+        base = {"status": "ok", "version": "test", "public_deployment": True, "live_available": True}
+        comps = {"database": {"ok": True, "detail": "ok"}}
+        if code is None:
+            return {**base, "mock_mode": True, "components": comps}, None
+        if code == "c0rrect":
+            return {**base, "mock_mode": False, "components": comps}, None
+        return None, "Backend error 401: invalid access code"
+
+    monkeypatch.setattr(api, "health", fake_health)
+    at = AppTest.from_file(str(FRONTEND / "app.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception
+    assert any("MOCK MODE" in w.value for w in at.sidebar.warning)
+    code_box = next(t for t in at.sidebar.text_input if t.label == "Access code")
+
+    code_box.set_value("wrong")
+    next(b for b in at.sidebar.button if b.label == "Unlock").click().run()
+    assert not at.exception
+    assert any("Invalid access code" in e.value for e in at.sidebar.error)
+    assert "access_code" not in at.session_state or not at.session_state["access_code"]
+
+    code_box = next(t for t in at.sidebar.text_input if t.label == "Access code")
+    code_box.set_value("c0rrect")
+    next(b for b in at.sidebar.button if b.label == "Unlock").click().run()
+    assert not at.exception
+    assert at.session_state["access_code"] == "c0rrect"
+    assert any("LIVE MODE" in i.value for i in at.sidebar.info)
+    assert any("unlocked" in s.value for s in at.sidebar.success)
+    assert sent_codes[-1] == "c0rrect"
+
+    next(b for b in at.sidebar.button if b.label == "Lock (back to mock)").click().run()
+    assert any("MOCK MODE" in w.value for w in at.sidebar.warning)

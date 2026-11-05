@@ -34,6 +34,13 @@
 | **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer verifier. | Client ready, verified live |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
 
+## Mock and live mode per request
+
+`app/mode.py` decides **per request**: `MOCK_MODE=false` means always live. Otherwise a request is live only if it
+carries a valid `X-Access-Code`. Both client sets (mock and Bifrost/Tavily) exist side by side, every run stores
+the mode it ran in, and the engine picks the matching clients per run. This is what lets one public deployment
+serve a free mock demo and gated live runs at the same time.
+
 ## Key design decisions
 
 - **The gateway is the only path to LLMs.** Every agent, the LLM judge and the claim extractor call Bifrost. This makes provider comparisons fair (identical request path) and lets Bifrost's logs double as an audit trail.

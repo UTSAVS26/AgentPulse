@@ -11,9 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.agents.runtime import AgentSpec, RuntimeConfig, run_agent, save_execution
 from app.agents.tools import TOOLS
-from app.clients import LLMClient, SearchClient, get_llm_client, get_search_client
 from app.config import Settings, get_settings
 from app.db import get_db
+from app.mode import Mode, get_mode, require_admin
 from app.models import Agent, TaskExecution
 from app.schemas import (
     AgentCreate,
@@ -78,7 +78,12 @@ def get_agent(agent_id: int, db: Session = Depends(get_db)) -> Agent:
     return _get_agent(db, agent_id)
 
 
-@router.put("/agents/{agent_id}", response_model=AgentOut, summary="Replace an agent's configuration")
+@router.put(
+    "/agents/{agent_id}",
+    response_model=AgentOut,
+    summary="Replace an agent's configuration",
+    dependencies=[Depends(require_admin)],
+)
 def update_agent(agent_id: int, body: AgentUpdate, db: Session = Depends(get_db)) -> Agent:
     agent = _get_agent(db, agent_id)
     for key, value in body.model_dump().items():
@@ -88,7 +93,12 @@ def update_agent(agent_id: int, body: AgentUpdate, db: Session = Depends(get_db)
     return agent
 
 
-@router.delete("/agents/{agent_id}", status_code=204, summary="Delete an agent and its executions")
+@router.delete(
+    "/agents/{agent_id}",
+    status_code=204,
+    summary="Delete an agent and its executions",
+    dependencies=[Depends(require_admin)],
+)
 def delete_agent(agent_id: int, db: Session = Depends(get_db)) -> Response:
     db.delete(_get_agent(db, agent_id))
     db.commit()
@@ -108,20 +118,19 @@ def try_agent(
     agent_id: int,
     body: TryAgentRequest,
     db: Session = Depends(get_db),
-    llm: LLMClient = Depends(get_llm_client),
-    search: SearchClient = Depends(get_search_client),
+    mode: Mode = Depends(get_mode),
     settings: Settings = Depends(get_settings),
 ) -> ExecutionDetailOut:
     agent = _get_agent(db, agent_id)
     config = RuntimeConfig(
         fault_rate=body.fault_rate,
-        sleep_scale=settings.mock_latency_scale if settings.mock_mode else 1.0,
+        sleep_scale=settings.mock_latency_scale if mode.mock else 1.0,
     )
     result = run_agent(
         AgentSpec.from_model(agent),
         body.prompt,
-        llm,
-        search,
+        mode.llm,
+        mode.search,
         config=config,
         rng=random.Random(body.seed),
     )

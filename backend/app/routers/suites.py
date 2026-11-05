@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.mode import require_admin
 from app.models import BenchmarkRun, Task, TaskSuite
 from app.schemas import SuiteCreate, SuiteDetailOut, SuiteOut, TaskOut
 
@@ -60,7 +61,12 @@ def create_suite(body: SuiteCreate, db: Session = Depends(get_db)) -> dict:
     return {**_summary(suite), "tasks": [TaskOut.model_validate(t) for t in suite.tasks]}
 
 
-@router.delete("/suites/{suite_id}", status_code=204, summary="Delete a suite (only if it has no runs)")
+@router.delete(
+    "/suites/{suite_id}",
+    status_code=204,
+    summary="Delete a suite (only if it has no runs)",
+    dependencies=[Depends(require_admin)],
+)
 def delete_suite(suite_id: int, db: Session = Depends(get_db)) -> Response:
     suite = _get_suite(db, suite_id)
     runs = db.scalar(select(func.count()).select_from(BenchmarkRun).where(BenchmarkRun.suite_id == suite_id))

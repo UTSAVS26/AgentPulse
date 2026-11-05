@@ -28,6 +28,11 @@ def page_setup(title: str, icon: str = "📈") -> dict | None:
 
 def sidebar_status() -> dict | None:
     data, err = api.health()
+    if err and "401" in err and st.session_state.get("access_code"):
+        # A stale/wrong code must never lock the user out: drop it and fall back to mock mode.
+        st.session_state["access_code"] = ""
+        st.session_state["access_code_error"] = "Invalid access code."
+        data, err = api.health()
     with st.sidebar:
         st.markdown("### System status")
         if err:
@@ -37,11 +42,36 @@ def sidebar_status() -> dict | None:
             st.warning("**MOCK MODE**: simulated LLM and search responses")
         else:
             st.info("**LIVE MODE**: Bifrost + Tavily")
+        if data.get("public_deployment"):
+            _access_code_box(live=not data.get("mock_mode"))
         for name, comp in data.get("components", {}).items():
             icon = "🟢" if comp["ok"] else "🔴"
             st.caption(f"{icon} {name}: {comp['detail']}")
         st.caption(f"Backend v{data['version']}")
     return data
+
+
+def _access_code_box(live: bool) -> None:
+    """Public demo: everyone gets mock mode; an access code unlocks live runs and admin actions."""
+    if live:
+        st.success("🔓 Live mode unlocked")
+        if st.button("Lock (back to mock)", key="lock_live"):
+            st.session_state["access_code"] = ""
+            st.rerun()
+        return
+    with st.expander("🔒 Unlock live mode"):
+        st.caption("Real models via Bifrost + live Tavily search. Ask the team for the access code.")
+        code = st.text_input("Access code", type="password", key="access_code_input")
+        if st.button("Unlock", key="unlock_live") and code:
+            data, err = api.health(code=code)
+            if err or data is None or data.get("mock_mode"):
+                st.session_state["access_code_error"] = "Invalid access code."
+            else:
+                st.session_state["access_code"] = code
+                st.session_state.pop("access_code_error", None)
+            st.rerun()
+        if st.session_state.get("access_code_error"):
+            st.error(st.session_state["access_code_error"])
 
 
 def show_error(err: str | None) -> bool:

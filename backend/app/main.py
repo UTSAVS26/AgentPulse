@@ -11,9 +11,10 @@ from pydantic import BaseModel, Field
 
 from app import __version__
 from app.bench.engine import mark_interrupted_runs
-from app.clients import LLMClient, LLMError, SearchClient, get_llm_client, get_search_client
+from app.clients import LLMError
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker, init_db, ping_db
+from app.mode import ACCESS_CODE_HEADER, Mode, get_mode, is_public_deployment, live_available
 from app.routers import agents as agents_router
 from app.routers import runs as runs_router
 from app.routers import suites as suites_router
@@ -62,7 +63,12 @@ class HealthResponse(BaseModel):
         examples=["ok"],
     )
     version: str = Field(examples=[__version__])
-    mock_mode: bool = Field(description="True when LLM and search calls are simulated.")
+    mock_mode: bool = Field(description="True when THIS request is served by the simulated LLM/search.")
+    live_available: bool = Field(
+        description="Whether live mode can be used (always locally with MOCK_MODE=false; with the "
+        f"`{ACCESS_CODE_HEADER}` header on public deployments)."
+    )
+    public_deployment: bool = Field(description="Public demo: mock by default; live and admin need a code.")
     components: dict[str, ComponentStatus] = Field(
         description="`database`, `llm` (Bifrost or mock) and `search` (Tavily or mock)."
     )
@@ -71,18 +77,23 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse, summary="Backend health check", tags=["system"])
 def health(
     settings: Settings = Depends(get_settings),
-    llm: LLMClient = Depends(get_llm_client),
-    search: SearchClient = Depends(get_search_client),
+    mode: Mode = Depends(get_mode),
 ) -> HealthResponse:
-    """Check the database, the LLM gateway and the search provider.
+    """Check the database, the LLM gateway and the search provider for this request's mode.
 
     Fast and free: the search check only verifies that Tavily is configured (no credits spent).
+    Send `X-Access-Code` to check (and validate the code for) live mode.
     """
-    checks = {"database": ping_db(), "llm": llm.ping(), "search": search.ping()}
+    checks = {"database": ping_db(), "llm": mode.llm.ping(), "search": mode.search.ping()}
     components = {name: ComponentStatus(ok=ok, detail=detail) for name, (ok, detail) in checks.items()}
     status = "ok" if all(c.ok for c in components.values()) else "degraded"
     return HealthResponse(
-        status=status, version=__version__, mock_mode=settings.mock_mode, components=components
+        status=status,
+        version=__version__,
+        mock_mode=mode.mock,
+        live_available=live_available(settings),
+        public_deployment=is_public_deployment(settings),
+        components=components,
     )
 
 
@@ -92,12 +103,10 @@ class ModelsResponse(BaseModel):
 
 
 @app.get("/models", response_model=ModelsResponse, summary="List routable models", tags=["system"])
-def list_models(
-    settings: Settings = Depends(get_settings), llm: LLMClient = Depends(get_llm_client)
-) -> ModelsResponse:
+def list_models(mode: Mode = Depends(get_mode)) -> ModelsResponse:
     """Every `provider/model` id that Bifrost can route to (or the mock's model list in mock mode)."""
     try:
-        models = llm.list_models()
+        models = mode.llm.list_models()
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return ModelsResponse(mock_mode=settings.mock_mode, models=models)
+    return ModelsResponse(mock_mode=mode.mock, models=models)

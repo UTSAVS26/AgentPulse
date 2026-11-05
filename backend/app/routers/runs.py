@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.bench.engine import BenchmarkEngine, RunValidationError, get_bench_engine, task_lookup
 from app.bench.metrics import ExecRecord, run_metrics
 from app.db import get_db
+from app.mode import Mode, get_mode, require_admin
 from app.models import Agent, BenchmarkRun, Task, TaskExecution, TaskSuite
 from app.schemas import ExecutionOut, RunCreate, RunExecutionOut, RunOut
 
@@ -75,6 +76,7 @@ def create_run(
     body: RunCreate,
     db: Session = Depends(get_db),
     engine: BenchmarkEngine = Depends(get_bench_engine),
+    mode: Mode = Depends(get_mode),
 ) -> RunOut:
     try:
         run = engine.create_run(
@@ -83,6 +85,7 @@ def create_run(
             agent_ids=body.agent_ids,
             repeats=body.repeats,
             fault_rate=body.fault_rate,
+            live=mode.live,
         )
     except RunValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -150,7 +153,12 @@ def get_run_metrics(run_id: int, db: Session = Depends(get_db)) -> dict:
     return {"run": run_out(db, run).model_dump(mode="json"), **metrics}
 
 
-@router.post("/runs/{run_id}/cancel", response_model=RunOut, summary="Cancel a pending or running run")
+@router.post(
+    "/runs/{run_id}/cancel",
+    response_model=RunOut,
+    summary="Cancel a pending or running run",
+    dependencies=[Depends(require_admin)],
+)
 def cancel_run(
     run_id: int, db: Session = Depends(get_db), engine: BenchmarkEngine = Depends(get_bench_engine)
 ) -> RunOut:
@@ -159,7 +167,12 @@ def cancel_run(
     return run_out(db, run)
 
 
-@router.delete("/runs/{run_id}", status_code=204, summary="Delete a finished run and its executions")
+@router.delete(
+    "/runs/{run_id}",
+    status_code=204,
+    summary="Delete a finished run and its executions",
+    dependencies=[Depends(require_admin)],
+)
 def delete_run(run_id: int, db: Session = Depends(get_db)) -> Response:
     run = _get_run(db, run_id)
     if run.status in ("pending", "running"):

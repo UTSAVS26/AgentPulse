@@ -20,6 +20,7 @@ import threading
 import traceback
 from collections.abc import Callable
 from concurrent.futures import Executor, ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 
@@ -29,7 +30,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.agents.runtime import AgentSpec, RuntimeConfig, run_agent, save_execution
 from app.bench.pricing import PriceBook
 from app.bench.scoring import ScoreResult, render_expected, score_judge, score_output
-from app.clients import LLMClient, MockLLMClient, SearchClient, get_llm_client, get_search_client
+from app.clients import LLMClient, MockLLMClient, SearchClient, clients_for
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker
 from app.models import Agent, BenchmarkRun, Task, TaskExecution, TaskSuite
@@ -50,28 +51,49 @@ class InlineExecutor(Executor):
         fn(*args, **kwargs)
 
 
+ClientFactory = Callable[[bool], tuple[LLMClient, SearchClient]]
+
+
+@dataclass(frozen=True)
+class _RunContext:
+    """Clients and price book for one run (live or mock)."""
+
+    llm: LLMClient
+    search: SearchClient
+    live: bool
+    prices: PriceBook
+
+
 class BenchmarkEngine:
+    """Runs benchmarks. Each run is live or mock (decided per request and stored on the run);
+    ``clients(live)`` returns the matching (LLM, search) pair."""
+
     def __init__(
         self,
         sessions: sessionmaker[Session],
-        llm: LLMClient,
-        search: SearchClient,
         settings: Settings,
-        prices: PriceBook,
+        clients: ClientFactory,
+        prices: dict[bool, PriceBook],
         executor: Executor | None = None,
     ):
         self.sessions = sessions
-        self.llm = llm
-        self.search = search
         self.settings = settings
-        self.prices = prices
+        self.clients = clients
+        self.prices = prices  # keyed by live: {True: PriceBook(bifrost), False: PriceBook(None)}
         self.executor = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="bench-run")
         self._cancelled: set[int] = set()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------------------ lifecycle
     def create_run(
-        self, db: Session, *, suite_id: int, agent_ids: list[int], repeats: int, fault_rate: float
+        self,
+        db: Session,
+        *,
+        suite_id: int,
+        agent_ids: list[int],
+        repeats: int,
+        fault_rate: float,
+        live: bool = False,
     ) -> BenchmarkRun:
         suite = db.get(TaskSuite, suite_id)
         if suite is None:
@@ -93,7 +115,7 @@ class BenchmarkEngine:
             agent_ids=agent_ids,
             repeats=repeats,
             fault_rate=fault_rate,
-            mock_mode=self.settings.mock_mode,
+            mock_mode=not live,
             status="pending",
             progress_total=total,
         )
@@ -146,15 +168,19 @@ class BenchmarkEngine:
                 (a.id, AgentSpec.from_model(a))
                 for a in db.scalars(select(Agent).where(Agent.id.in_(run.agent_ids)))
             ]
-            repeats, fault_rate = run.repeats, run.fault_rate
+            repeats, fault_rate, live = run.repeats, run.fault_rate, not run.mock_mode
 
-        self._prime_mock(tasks)
+        llm, search = self.clients(live)
+        ctx = _RunContext(llm=llm, search=search, live=live, prices=self.prices[live])
+        self._prime_mock(ctx.llm, tasks)
         try:
             with ThreadPoolExecutor(
                 max_workers=max(1, len(agents)), thread_name_prefix="bench-agent"
             ) as pool:
                 futures = [
-                    pool.submit(self._run_agent_tasks, run_id, agent_id, spec, tasks, repeats, fault_rate)
+                    pool.submit(
+                        self._run_agent_tasks, ctx, run_id, agent_id, spec, tasks, repeats, fault_rate
+                    )
                     for agent_id, spec in agents
                 ]
                 for f in futures:
@@ -175,25 +201,27 @@ class BenchmarkEngine:
         with self._lock:
             self._cancelled.discard(run_id)
 
-    def _prime_mock(self, tasks: list[dict]) -> None:
+    @staticmethod
+    def _prime_mock(llm: LLMClient, tasks: list[dict]) -> None:
         """In mock mode, teach the fake LLM the right (and stale) answers so scores are meaningful."""
-        if isinstance(self.llm, MockLLMClient):
-            self.llm.set_answer_key(
+        if isinstance(llm, MockLLMClient):
+            llm.set_answer_key(
                 {t["prompt"]: render_expected(t["expected"]).split("|")[0] for t in tasks},
                 {t["prompt"]: t["stale_answer"] for t in tasks if t["stale_answer"]},
             )
 
-    def _judge(self) -> Callable[[str, str, str], ScoreResult] | None:
-        if self.settings.mock_mode:
+    def _judge(self, ctx: _RunContext) -> Callable[[str, str, str], ScoreResult] | None:
+        if not ctx.live:
             return None  # contains fallback, clearly labelled in score_detail
 
         def judge(output: str, expected: str, question: str) -> ScoreResult:
-            return score_judge(output, expected, question, self.llm, self.settings.judge_model)
+            return score_judge(output, expected, question, ctx.llm, self.settings.judge_model)
 
         return judge
 
     def _run_agent_tasks(
         self,
+        ctx: _RunContext,
         run_id: int,
         agent_id: int,
         spec: AgentSpec,
@@ -203,17 +231,18 @@ class BenchmarkEngine:
     ) -> None:
         config = RuntimeConfig(
             fault_rate=fault_rate,
-            sleep_scale=self.settings.mock_latency_scale if self.settings.mock_mode else 1.0,
+            sleep_scale=1.0 if ctx.live else self.settings.mock_latency_scale,
         )
-        judge = self._judge()
+        judge = self._judge(ctx)
         for repeat in range(repeats):
             for task in tasks:
                 if self._is_cancelled(run_id):
                     return
-                self._run_one(run_id, agent_id, spec, task, repeat, config, judge)
+                self._run_one(ctx, run_id, agent_id, spec, task, repeat, config, judge)
 
     def _run_one(
         self,
+        ctx: _RunContext,
         run_id: int,
         agent_id: int,
         spec: AgentSpec,
@@ -225,7 +254,7 @@ class BenchmarkEngine:
         rng = random.Random(f"{run_id}|{agent_id}|{task['id']}|{repeat}")
         with self.sessions() as db:
             try:
-                result = run_agent(spec, task["prompt"], self.llm, self.search, config, rng)
+                result = run_agent(spec, task["prompt"], ctx.llm, ctx.search, config, rng)
                 sr = score_output(
                     result.output,
                     scorer=task["scorer"],
@@ -234,7 +263,7 @@ class BenchmarkEngine:
                     question=task["prompt"],
                     judge=judge,
                 )
-                cost, price_source = self.prices.cost(
+                cost, price_source = ctx.prices.cost(
                     spec.model, result.prompt_tokens, result.completion_tokens
                 )
                 execution = save_execution(
@@ -292,10 +321,9 @@ def get_bench_engine() -> BenchmarkEngine:
     s = get_settings()
     return BenchmarkEngine(
         sessions=get_sessionmaker(),
-        llm=get_llm_client(),
-        search=get_search_client(),
         settings=s,
-        prices=PriceBook(None if s.mock_mode else s.bifrost_url),
+        clients=clients_for,
+        prices={True: PriceBook(s.bifrost_url), False: PriceBook(None)},
     )
 
 

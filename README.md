@@ -19,6 +19,12 @@ still true today, extracting time-sensitive claims and verifying them against li
 
 > **Status:** Phase 3 of 7. Benchmark engine with scoring, repeated runs, cost from Bifrost pricing, reliability metrics and the Run Benchmark page. See [CHANGELOG.md](CHANGELOG.md).
 
+## Live demo
+
+**Hugging Face Space:** auto-deployed from `main` after CI passes (see [docs/deployment.md](docs/deployment.md)).
+Everyone gets the full product in **mock mode**. Judges can unlock **live mode** (real models via Bifrost +
+live Tavily) with an access code from the team.
+
 ## Quickstart
 
 ```bash
@@ -48,6 +54,7 @@ Full instructions, API keys, Ollama setup and troubleshooting: **[docs/setup.md]
 - [Agents](docs/agents.md): agent definition, default agents, tools, runtime loop, fault injection
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula and the reliability score
+- [Deployment](docs/deployment.md): Hugging Face Space auto-deploy, access code, secrets
 - [Continuous integration](docs/ci.md): what runs on every push and how to run it locally
 - [API reference](docs/api.md): endpoints with curl examples (full spec at http://localhost:8000/docs)
 
@@ -76,4 +83,5 @@ docs/        Project documentation
 | `make test` / `make lint` / `make format` | Tests / lint check / auto-fix |
 | `make ui-test` | Render dashboard pages against the running stack (needs `make up`) |
 | `make validate-config` | Validate `bifrost/config.json` against Bifrost's JSON schema |
+| `make space-smoke` | Build the Hugging Face Space image, run it like HF does, and smoke-test it |
 | `make check` | Lint + config validation + tests (what CI runs). **Run before every commit.** |

@@ -1,4 +1,5 @@
-from app.clients import get_llm_client
+from app.clients import MockSearchClient
+from app.mode import Mode, get_mode
 
 
 class _DownLLM:
@@ -15,6 +16,7 @@ def test_health_all_components_ok_in_mock_mode(client):
     body = res.json()
     assert body["status"] == "ok"
     assert body["mock_mode"] is True
+    assert body["live_available"] is False and body["public_deployment"] is False
     assert body["components"]["database"] == {"ok": True, "detail": "ok"}
     assert body["components"]["llm"] == {"ok": True, "detail": "mock"}
     assert body["components"]["search"] == {"ok": True, "detail": "mock"}
@@ -23,9 +25,10 @@ def test_health_all_components_ok_in_mock_mode(client):
 def test_health_degraded_when_gateway_down(client):
     from app.main import app
 
-    app.dependency_overrides[get_llm_client] = lambda: _DownLLM()
+    app.dependency_overrides[get_mode] = lambda: Mode(live=True, llm=_DownLLM(), search=MockSearchClient())
     body = client.get("/health").json()
     assert body["status"] == "degraded"
+    assert body["mock_mode"] is False
     assert body["components"]["llm"]["ok"] is False
     assert "unreachable" in body["components"]["llm"]["detail"]
 

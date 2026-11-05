@@ -7,7 +7,7 @@ import time
 from collections.abc import Iterator
 from functools import lru_cache
 
-from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -25,8 +25,21 @@ def get_engine() -> Engine:
     url = get_settings().database_url
     kwargs: dict = {"pool_pre_ping": True}
     if url.startswith("sqlite"):
-        kwargs["connect_args"] = {"check_same_thread": False}
-    return create_engine(url, **kwargs)
+        # Benchmark threads write concurrently: wait for locks instead of failing immediately.
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
+    engine = create_engine(url, **kwargs)
+    if url.startswith("sqlite"):
+        event.listen(engine, "connect", _sqlite_pragmas)
+    return engine
+
+
+def _sqlite_pragmas(dbapi_conn, _record) -> None:
+    """WAL lets readers (dashboard polling) and the writer (benchmark threads) work in parallel."""
+    cur = dbapi_conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.execute("PRAGMA synchronous=NORMAL")
+    cur.execute("PRAGMA busy_timeout=30000")
+    cur.close()
 
 
 @lru_cache

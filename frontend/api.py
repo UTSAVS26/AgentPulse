@@ -15,8 +15,24 @@ DEFAULT_TIMEOUT = float(os.getenv("FRONTEND_HTTP_TIMEOUT_S", "15"))
 LONG_TIMEOUT = float(os.getenv("FRONTEND_LONG_TIMEOUT_S", "600"))  # agent runs can be slow (local models)
 
 
+ACCESS_CODE_HEADER = "X-Access-Code"
+
+
+def access_code() -> str | None:
+    """The live-mode access code entered in the sidebar (if any)."""
+    try:
+        import streamlit as st
+
+        return st.session_state.get("access_code") or None
+    except Exception:  # outside a Streamlit session (e.g. plain scripts)
+        return None
+
+
 def _request(method: str, path: str, **kwargs: Any) -> tuple[Any | None, str | None]:
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
+    code = kwargs.pop("code", None) or access_code()
+    if code:
+        kwargs["headers"] = {**kwargs.get("headers", {}), ACCESS_CODE_HEADER: code}
     try:
         res = requests.request(method, f"{BACKEND_URL}{path}", **kwargs)
     except requests.ConnectionError:
@@ -61,5 +77,5 @@ def delete(path: str, **kwargs: Any) -> tuple[Any | None, str | None]:
     return _request("DELETE", path, **kwargs)
 
 
-def health() -> tuple[dict | None, str | None]:
-    return get("/health", timeout=5)
+def health(code: str | None = None) -> tuple[dict | None, str | None]:
+    return get("/health", timeout=5, code=code)

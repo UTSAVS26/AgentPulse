@@ -2,6 +2,20 @@
 
 All notable changes per build phase.
 
+## [Deploy] Hugging Face Space auto-deploy + public demo mode
+
+### Added
+- **Per-request mock/live mode** (`app/mode.py`): with `MOCK_MODE=true` + `LIVE_ACCESS_CODE`, visitors get mock mode and the `X-Access-Code` header unlocks live mode. Wrong code → 401. Runs record their mode and the engine uses the matching clients per run.
+- **Admin guard** on public deployments: editing or deleting agents, deleting suites or runs, and cancelling runs need the code (403 otherwise).
+- Dashboard: sidebar **"Unlock live mode"** (verifies the code, recovers gracefully from a stale code, lock button).
+- **Single-container Space image** (`deploy/space/`): static Bifrost binary + FastAPI + Streamlit (port 7860), uid 1000, SQLite in WAL mode or Postgres via `DATABASE_URL`, and a cloud Bifrost config without Ollama.
+- `scripts/build_space.py`, `scripts/deploy_space.py` (create Space, sync secrets, upload, wait for RUNNING, check URL), `scripts/smoke_space.py`, `scripts/wait_healthy.py`.
+- **Deploy workflow** (`.github/workflows/deploy.yml`): runs after CI succeeds on `main`, or manually.
+- CI job **"Hugging Face Space image"** (`make space-smoke`). `make validate-config` now validates both Bifrost configs.
+- Postgres URLs from hosted providers (`postgres://`, `postgresql://`) are normalised to the psycopg driver.
+- Tests: 26 new backend tests (171 total) for access-code rules, per-run mode, the deploy bundle and DB URLs, plus a UI test for the unlock flow.
+- Docs: `docs/deployment.md`, plus updates to the README, setup, architecture and CI docs.
+
 ## [CI] Continuous integration
 
 ### Added

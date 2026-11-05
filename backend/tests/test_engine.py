@@ -37,12 +37,12 @@ def seeded(db_engine):
 
 @pytest.fixture()
 def engine(seeded):
+    mock = (MockLLMClient(seed=7, latency_scale=0), MockSearchClient(latency_scale=0))
     return BenchmarkEngine(
         sessions=get_sessionmaker(),
-        llm=MockLLMClient(seed=7, latency_scale=0),
-        search=MockSearchClient(latency_scale=0),
         settings=SETTINGS,
-        prices=PriceBook(None),
+        clients=lambda live: mock,  # tests never call real providers; live runs use the same fakes
+        prices={True: PriceBook(None), False: PriceBook(None)},
         executor=InlineExecutor(),
     )
 
