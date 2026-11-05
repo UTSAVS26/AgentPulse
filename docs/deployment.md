@@ -33,8 +33,16 @@ container (uid 1000)
 └── streamlit    0.0.0.0:$PORT    dashboard: the only public port (Render sets PORT)
 ```
 
-[`deploy/start.sh`](../deploy/start.sh) starts them in order and exits if any of them dies, so the platform
-restarts the container. The cloud Bifrost config has **no Ollama provider**, so the local-model agent returns a
+[`deploy/start.sh`](../deploy/start.sh) is tuned for the free plan's **0.1 CPU**:
+
+1. **Dashboard first.** Streamlit binds `$PORT` within seconds, so Render's port scan succeeds. Until the backend
+   is ready, the page shows "Cannot reach the backend".
+2. **Backend next.** If the dashboard or the backend dies, the container exits and Render restarts it.
+3. **Bifrost last, and never fatal.** It runs in a restart loop, because only live mode needs it. It isn't started
+   at all if no provider keys are set. Its SQLite stores are disabled in `bifrost/config.cloud.json` (all config
+   comes from the file), which avoids `database is locked` crashes on a slow CPU.
+
+Measured with Docker limited to 0.1 CPU / 512 MB: Bifrost ready in ~40 s, dashboard and backend in ~70 s, ~250 MB RAM. The cloud Bifrost config has **no Ollama provider**, so the local-model agent returns a
 clean "provider not configured" error in live mode.
 
 ## One-time setup (about 10 minutes)
@@ -107,6 +115,7 @@ Only one container can use port 7860, and each `image-*` target replaces the pre
 |---|---|
 | Render never deploys after a push | The GitHub checks on that commit must all pass. If Render still waits, set **Settings → Auto-Deploy → On Commit**. |
 | Build fails | Render → **Events** → the failed deploy → build log. Reproduce locally with `make image-smoke`. |
-| Deploy fails the health check | **Logs** tab. Look for which `[start]` service didn't come up. |
+| Deploy fails the health check / "No open ports detected" | **Logs** tab: `[start] dashboard starting on port …` should appear within seconds. Reproduce Render's limits locally: `docker run --cpus=0.1 --memory=512m -e PORT=10000 -p 10000:10000 agentpulse-app` |
+| Logs show `Bifrost exited … live mode unavailable` | Mock mode keeps working. Bifrost restarts automatically. If it keeps failing, check the provider keys. |
 | *Invalid access code* when unlocking | `LIVE_ACCESS_CODE` isn't set or differs on Render. Locally, the container on :7860 is from a different `make image-*` run (`image-smoke` uses `smoke-test-code`, `image-live` uses `letmein`). |
 | Live runs fail with `no keys found that support model` | The provider key is missing in Render → Environment |

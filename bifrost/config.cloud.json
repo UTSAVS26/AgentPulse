@@ -7,6 +7,12 @@
     "enable_logging": false,
     "enforce_auth_on_inference": false
   },
+  "config_store": {
+    "enabled": false
+  },
+  "logs_store": {
+    "enabled": false
+  },
   "providers": {
     "groq": {
       "keys": [

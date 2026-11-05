@@ -14,6 +14,9 @@ Hugging Face now requires a paid plan for Docker Spaces, so the deployment moved
 ### Removed
 - Hugging Face deploy workflow and scripts (`deploy.yml`, `build_space.py`, `deploy_space.py`), the Space card, and the `huggingface_hub` dev dependency. The `HF_*` GitHub secrets are no longer used.
 
+### Fixed
+- **Render deploy crash-looped** ("No open ports detected", then `Bifrost fatal: database is locked`). On 0.1 CPU, Bifrost's SQLite stores hit lock timeouts, and `start.sh` started the dashboard last and stopped the whole container when Bifrost died. Now the dashboard binds `$PORT` first, Bifrost runs in a non-fatal restart loop (skipped without provider keys), and its SQLite stores are disabled in the cloud config. Reproduced and verified locally with `--cpus=0.1 --memory=512m`: no lock errors, port open in ~70 s, live mode and all 12 smoke checks pass. Regression tests cover the startup order and the store settings.
+
 ### Verified
 - The image runs on Render's default port (`PORT=10000`) at about 290 MB RAM (512 MB free-plan limit) and passes all 12 smoke checks.
 

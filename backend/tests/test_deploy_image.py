@@ -75,3 +75,23 @@ def test_render_blueprint():
 )
 def test_database_url_normalised_for_hosted_postgres(raw, expected):
     assert Settings(database_url=raw).database_url == expected
+
+
+def test_start_script_binds_port_first_and_bifrost_is_never_fatal():
+    """Regression (Render free tier, 0.1 CPU): the dashboard must bind $PORT before anything slow
+    starts, and a Bifrost crash must not stop the container (mock mode doesn't need it)."""
+    script = (ROOT / "deploy" / "start.sh").read_text(encoding="utf-8")
+    streamlit, uvicorn, bifrost = (
+        script.index(s) for s in ("streamlit run", "uvicorn app.main", "bifrost -app-dir")
+    )
+    assert streamlit < uvicorn < bifrost
+    wait_line = next(ln for ln in script.splitlines() if ln.startswith("wait -n"))
+    assert "FRONTEND_PID" in wait_line and "BACKEND_PID" in wait_line and "BIFROST" not in wait_line
+    assert "while true" in script  # supervised restart loop
+
+
+def test_cloud_bifrost_uses_no_sqlite_stores():
+    """Regression: Bifrost's SQLite stores hit 'database is locked' and crashed on 0.1 CPU."""
+    cfg = json.loads((ROOT / "bifrost" / "config.cloud.json").read_text(encoding="utf-8"))
+    assert cfg["config_store"] == {"enabled": False}
+    assert cfg["logs_store"] == {"enabled": False}
