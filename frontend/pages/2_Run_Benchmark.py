@@ -161,6 +161,7 @@ if not polling:
             df = pd.DataFrame(
                 [
                     {
+                        "Trace": f"Traces?execution={e['id']}",
                         "ID": e["id"],
                         "Agent": e["agent_name"],
                         "Task": e["task_key"],
@@ -180,8 +181,13 @@ if not polling:
             only_failed = st.checkbox("Only failed")
             if only_failed:
                 df = df[df["Passed"] == "❌"]
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            st.dataframe(
+                df,
+                hide_index=True,
+                use_container_width=True,
+                column_config={"Trace": st.column_config.LinkColumn("Trace", display_text="open ↗")},
+            )
             st.caption(
                 f"Pass rate {pct(sum(e['passed'] for e in execs) / len(execs))}. "
-                "Open an execution ID on the Traces page (next phase) to see every step."
+                "Click **open ↗** for the step-by-step trace, or see **Compare** for charts."
             )

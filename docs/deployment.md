@@ -116,6 +116,7 @@ Only one container can use port 7860, and each `image-*` target replaces the pre
 | Render never deploys after a push | The GitHub checks on that commit must all pass. If Render still waits, set **Settings → Auto-Deploy → On Commit**. |
 | Build fails | Render → **Events** → the failed deploy → build log. Reproduce locally with `make image-smoke`. |
 | Deploy fails the health check / "No open ports detected" | **Logs** tab: `[start] dashboard starting on port …` should appear within seconds. Reproduce Render's limits locally: `docker run --cpus=0.1 --memory=512m -e PORT=10000 -p 10000:10000 agentpulse-app` |
+| Logs show Bifrost `error` lines: `governance plugin … config store`, `auth middleware requires config store`, `logging plugin not found` | Expected and harmless. The cloud config disables Bifrost's database (to avoid lock crashes on 0.1 CPU), and these optional features need it. AgentPulse uses none of them, keeps auth off, and records its own traces. Don't add an empty `governance` section: that makes Bifrost refuse to start. |
 | Logs show `Bifrost exited … live mode unavailable` | Mock mode keeps working. Bifrost restarts automatically. If it keeps failing, check the provider keys. |
 | *Invalid access code* when unlocking | `LIVE_ACCESS_CODE` isn't set or differs on Render. Locally, the container on :7860 is from a different `make image-*` run (`image-smoke` uses `smoke-test-code`, `image-live` uses `letmein`). |
 | Live runs fail with `no keys found that support model` | The provider key is missing in Render → Environment |

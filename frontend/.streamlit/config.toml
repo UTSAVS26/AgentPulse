@@ -1,0 +1,6 @@
+[theme]
+# Charts use a palette validated against this dark background (see docs/dashboard.md).
+base = "dark"
+
+[client]
+toolbarMode = "minimal"

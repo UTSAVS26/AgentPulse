@@ -2,6 +2,22 @@
 
 All notable changes per build phase.
 
+## [Phase 4] Comparison dashboard & trace viewer
+
+### Added
+- **Compare** page: headline tiles (most reliable, most accurate, fastest, cheapest per correct answer), leaderboard, and tabs for overview (reliability bars, radar of up to 3 agents), speed & cost (p50/p95 latency, accuracy-vs-cost scatter, tokens, total cost, data table), per task (pass-rate heatmap with ⏰ time-sensitive markers, accuracy by category), and failures & recovery (per-agent recovery and every failed execution with its reason and a trace link).
+- **Traces** page: open an execution by link (`?execution=<id>`), by run → agent → task → repeat, from ad-hoc runs, or by ID. Shows prompt, answer, scoring explanation, cost, metrics, a step **timeline** chart and the full step list.
+- `frontend/charts.py`: Plotly builders following a validated data-viz palette (color by agent in a fixed order, radar capped at 3 agents, direct labels, one axis per chart, reserved status colors). Dark theme pinned in `frontend/.streamlit/config.toml`.
+- Trace links in the Run Benchmark executions table.
+- Tests: 17 chart unit tests (part of `make test`) and 5 page tests (30 frontend tests in total).
+
+### Visual review
+- Every chart was rendered from a real run and inspected. That surfaced and fixed: radar tick labels colliding with axis labels, overlapping and clipped scatter labels, an unreadable `$50µ` cost axis (now cost per 1,000 tasks), low-contrast heatmap text (per-cell ink), and an undefined recovery value drawn as a misleading 0% (hover now says "n/a"). Each fix has a regression test.
+- Docs: `docs/dashboard.md`. Deployment troubleshooting explains the harmless Bifrost log lines on Render.
+
+### Fixed
+- Radar cost efficiency: when a free model was in the run, every paid agent showed 100%. Paid agents are now scored relative to the cheapest *paid* agent.
+
 ## [Deploy] Switch hosting to Render
 
 Hugging Face now requires a paid plan for Docker Spaces, so the deployment moved to a **free Render Docker web service**.
