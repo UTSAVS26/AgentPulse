@@ -91,6 +91,17 @@ def main() -> int:
         fc,
     )
 
+    status, suite = call("POST", "/suites", {"name": "Smoke suite", "tasks": []})
+    task_status = call(
+        "POST", f"/suites/{suite.get('id')}/tasks", {"key": "k", "prompt": "p?", "expected": "x"}
+    )[0]
+    builtin = next((x for x in call("GET", "/suites")[1] if x.get("builtin")), {})
+    check(
+        "custom suite + task without code; built-ins read-only",
+        status == 201 and task_status == 201 and call("DELETE", f"/suites/{builtin.get('id')}")[0] == 403,
+        (status, task_status),
+    )
+
     check("wrong access code -> 401", call("GET", "/health", code="nope")[0] == 401)
     status, live = call("GET", "/health", code=CODE)
     check("right access code -> live mode", status == 200 and live.get("mock_mode") is False, live)

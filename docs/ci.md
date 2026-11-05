@@ -8,7 +8,7 @@ every **pull request**, and on demand from the Actions tab.
 | **Lint & config validation** | `make setup` · `make lint` (ruff lint + format check) · validates `bifrost/config.json` against Bifrost's JSON schema · `docker compose config` | ~1 min |
 | **Backend tests** | `make test`: every backend test, warnings treated as errors (SQLite, mock mode, no network) | ~1 min |
 | **Docker stack + dashboard tests** | `make up` (real images, **mock mode**) · `make health` · checks 6 agents and 3 suites are seeded · `make ui-test` (Streamlit AppTest against the running stack, including a full benchmark run) · fails if container logs contain a traceback · dumps logs on failure · `docker compose down -v` | ~5–8 min |
-| **Deploy image** | `make image-smoke`: builds `deploy/Dockerfile` (the exact image Render deploys), runs it as uid 1000 on port 7860 with a test access code, then 14 checks (seeded data and demo runs, a mock benchmark on SQLite, the stale-answer detector, access-code rules) plus a log scan | ~4 min |
+| **Deploy image** | `make image-smoke`: builds `deploy/Dockerfile` (the exact image Render deploys), runs it as uid 1000 on port 7860 with a test access code, then 15 checks (seeded data and demo runs, a mock benchmark on SQLite, the stale-answer detector, custom suites, access-code rules) plus a log scan | ~4 min |
 | **Live integration check** (manual only) | Starts the stack in live mode and runs `app.scripts.live_check` against Groq, OpenRouter and Tavily (no Ollama in CI) | ~3 min |
 
 The CI calls the same `make` targets you use locally, so a green CI also proves the Makefile works on Linux.

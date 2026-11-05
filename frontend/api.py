@@ -93,3 +93,15 @@ def download(path: str, params: dict | None = None, timeout: float = 60) -> tupl
     if not res.ok:
         return None, _format_error(res)
     return res.content, None
+
+
+def post_text(path: str, text: str, params: dict | None = None) -> tuple[Any | None, str | None]:
+    """POST a raw text body (file imports), JSON response."""
+    return _request(
+        "POST",
+        path,
+        params=params,
+        data=text.encode("utf-8"),
+        headers={"Content-Type": "text/plain; charset=utf-8"},
+        timeout=60,
+    )

@@ -41,6 +41,8 @@ class TaskSuite(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
     description: Mapped[str] = mapped_column(Text, default="")
+    builtin: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
+    """Seeded from ``seed/suites/*.yaml``: read-only through the API (duplicate to edit)."""
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     tasks: Mapped[list[Task]] = relationship(

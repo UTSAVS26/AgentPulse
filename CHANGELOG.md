@@ -2,6 +2,36 @@
 
 All notable changes per build phase.
 
+## [v2.1] Build your own benchmarks: suites & task editor
+
+### Added
+- **🧪 Suites** page:
+  - create a blank suite, **duplicate** any suite (built-ins too), and **import** YAML or CSV;
+  - **edit tasks in a table** (add, edit and delete rows, then save), with per-row validation errors;
+  - **export** YAML or CSV, rename or delete, and **test a scorer** against a sample answer;
+  - a warning for tasks without an expected answer.
+  - Run Benchmark preselects the suite you were editing and links back ("Edit tasks").
+- API:
+  - `PUT /suites/{id}`, `POST /suites/{id}/duplicate`;
+  - task CRUD (`POST/PUT/DELETE /suites/{id}/tasks[/{task_id}]`);
+  - `GET /suites/{id}/export?format=yaml|csv`, `POST /suites/import?format=yaml|csv` (raw body, 1 MB limit, per-line errors);
+  - `POST /scoring/preview`.
+  - Suites now report `builtin` and `runs`, and tasks report `executions`.
+- `task_suites.builtin` (added to existing databases on startup) marks the seeded suites. They are **read-only** through the API (`403 "duplicate it to edit"`).
+- Protection: a task used by an execution, or a suite with runs, can't be deleted.
+- Suites can now be created empty. Names are trimmed and unique regardless of case.
+- `frontend/suite_edit.py`: the table → API diff as pure, unit-tested functions.
+- `ui.nav_link()`: page links that also work when a page runs on its own (AppTest).
+- Tests: 21 backend suite tests, 4 table-diff unit tests (part of `make test`), 5 page tests. The deploy-image smoke test gains a custom-suite check (15 checks).
+
+### Changed
+- **Public demo:** custom suites and tasks need no access code (deleting a custom suite used to). Built-ins stay protected.
+- Pages are renumbered (Suites is 3; slot 2 is kept for the Models page in v2.2). Page URLs (`/Run_Benchmark`, `/Compare`…) are unchanged.
+
+### Verified
+- In a real browser (headless Chromium): typed a new row into the task grid, saved it, and the task was created with default scorer and category. That is the one path AppTest can't drive.
+- Postgres migration on existing data: `task_suites.builtin` added, and the seeded suites were flagged on startup.
+
 ## [Phase 7] Demo hardening & final docs
 
 ### Added

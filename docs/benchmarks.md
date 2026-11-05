@@ -35,7 +35,39 @@ tasks:
     stale_answer: null              # optional: the typical outdated answer
 ```
 
-Create custom suites with `POST /suites` (see [api.md](api.md#suites)), or add a YAML file to `seed/suites/` and restart.
+## Your own suites
+
+Built-in suites are **read-only** (seeded from YAML and re-synced on every start). Build your own in the
+dashboard's **🧪 Suites** page, or through the API ([api.md](api.md#suites)):
+
+| Action | How |
+|---|---|
+| Start from scratch | **Create a suite** → *Blank suite*, then add rows in the task table |
+| Start from a built-in | **📄 Duplicate**: an editable copy named "… (copy)" |
+| Edit tasks | Edit cells in the table, add rows at the bottom, delete rows with the row selector, then **💾 Save changes**. Every row is validated and errors are shown per row; rows without errors are saved. |
+| Check a scorer | **🧪 Test a scorer**: score a sample answer against a task's scorer and expected answer (no model is called; `judge` previews with its `contains` fallback) |
+| Import | **Create a suite** → *Import a file*: YAML (the format above) or CSV |
+| Export | **⬇️ Export YAML / CSV**: also the easiest template for a new file |
+
+**Protecting results**: a task that a run has already used can't be deleted (so old runs stay readable), and
+a suite with runs can't be deleted (delete the runs first). Editing a used task is allowed; the change applies
+to future runs. Custom suites are open to everyone, including on the public demo; built-ins can't be changed
+there or anywhere.
+
+### CSV format
+
+One row per task. Header names match the YAML fields, and only `key` and `prompt` are required:
+
+```csv
+key,prompt,expected,scorer,tolerance,category,time_sensitive,stale_answer
+capital-peru,What is the capital of Peru?,Lima,contains,0,geography,false,
+compound,"$1,000 at 5% for 10 years, compounded yearly?",1628.89,numeric,0.01,finance,false,
+```
+
+Blank cells use the defaults (`contains`, `0`, `general`, `false`). `time_sensitive` accepts
+`true/false/yes/no/1/0`. Unknown columns are ignored with a warning. Errors are reported by line.
+
+You can also add a YAML file to `seed/suites/` and restart; it then becomes a built-in suite.
 
 ## Scorers
 

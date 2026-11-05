@@ -6,6 +6,7 @@ Streamlit app in [`frontend/`](../frontend/). Pages appear in the sidebar in thi
 |---|---|
 | **Home** | Overview, a snapshot of the latest finished run (top agents, links to Compare, Traces, Detector and Reports), and system status plus mock/live mode in the sidebar |
 | **🤖 Agents** | List, create, edit and delete agents; **try** an agent on one prompt with fault injection and see its trace |
+| **🧪 Suites** | Build your own benchmarks: create, duplicate, import/export (YAML, CSV) suites; edit tasks in a table; test a scorer on a sample answer. Built-ins are read-only. |
 | **🏁 Run Benchmark** | Configure suite × agents × repeats × fault rate, watch live progress, partial leaderboard, all executions |
 | **📊 Compare** | Multi-agent comparison for one run: headline tiles, leaderboard, charts |
 | **🔍 Traces** | Step-by-step view of a single execution |

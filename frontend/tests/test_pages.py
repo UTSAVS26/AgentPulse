@@ -110,7 +110,7 @@ def _wait_for_run(run_id: int, timeout_s: float = 240) -> dict:
 
 
 def test_run_benchmark_page_starts_run_and_shows_leaderboard():
-    at = app("pages/2_Run_Benchmark.py")
+    at = app("pages/4_Run_Benchmark.py")
     assert any(s.label == "Task suite" for s in at.selectbox)
     agents_select = next(m for m in at.multiselect if m.label == "Agents")
     agents_select.set_value(agents_select.options[:2])
@@ -135,7 +135,7 @@ def test_run_benchmark_page_starts_run_and_shows_leaderboard():
 
     # Re-render with THIS run selected. (The page defaults to the newest run; other runs may be
     # started concurrently, e.g. from a browser, so the test must not rely on "newest".)
-    at = AppTest.from_file(str(FRONTEND / "pages/2_Run_Benchmark.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/4_Run_Benchmark.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = run_id
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -150,7 +150,7 @@ def test_run_benchmark_page_degrades_when_backend_down(monkeypatch):
     import api
 
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    at = AppTest.from_file(str(FRONTEND / "pages/2_Run_Benchmark.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/4_Run_Benchmark.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("Cannot reach the backend" in e.value for e in at.error)
@@ -221,7 +221,7 @@ def _plotly_charts(at):
 
 
 def test_compare_page_renders_tiles_leaderboard_and_charts(finished_run):
-    at = AppTest.from_file(str(FRONTEND / "pages/3_Compare.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Compare.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = finished_run["id"]
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -249,7 +249,7 @@ def test_compare_page_empty_state(monkeypatch):
     monkeypatch.setattr(
         api, "get", lambda path, **kw: ([], None) if path == "/runs" else real_get(path, **kw)
     )
-    at = AppTest.from_file(str(FRONTEND / "pages/3_Compare.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Compare.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception
     assert any("No benchmark results yet" in i.value for i in at.info)
@@ -258,7 +258,7 @@ def test_compare_page_empty_state(monkeypatch):
 def test_traces_page_opens_execution_from_link(finished_run):
     execs = requests.get(f"{BACKEND}/runs/{finished_run['id']}/executions", timeout=10).json()
     target = next((e for e in execs if e["faults_injected"]), execs[0])
-    at = AppTest.from_file(str(FRONTEND / "pages/4_Traces.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/6_Traces.py"), default_timeout=TIMEOUT)
     at.query_params["execution"] = str(target["id"])
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -269,7 +269,7 @@ def test_traces_page_opens_execution_from_link(finished_run):
 
 
 def test_traces_page_browse_by_run(finished_run):
-    at = AppTest.from_file(str(FRONTEND / "pages/4_Traces.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/6_Traces.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = finished_run["id"]
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -281,7 +281,7 @@ def test_phase4_pages_degrade_when_backend_down(monkeypatch):
     import api
 
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    for page in ("pages/3_Compare.py", "pages/4_Traces.py"):
+    for page in ("pages/5_Compare.py", "pages/6_Traces.py"):
         at = AppTest.from_file(str(FRONTEND / page), default_timeout=TIMEOUT)
         at.run()
         assert not at.exception, (page, [e.value for e in at.exception])
@@ -305,7 +305,7 @@ def freshness_run():
 
 
 def test_detector_checks_example_text_and_shows_verdicts():
-    at = app("pages/5_Stale_Answer_Detector.py")
+    at = app("pages/7_Stale_Answer_Detector.py")
     example = next(s for s in at.selectbox if s.label == "Load an example")
     example.set_value("A stale answer").run()
     assert "Rishi Sunak" in at.text_area(key="fc_text").value
@@ -325,7 +325,7 @@ def test_detector_opens_a_check_from_its_link_and_lists_history():
         json={"text": "Andy Burnham is the current UK Prime Minister."},
         timeout=60,
     ).json()
-    at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/7_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
     at.query_params["check"] = str(check["id"])
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -337,7 +337,7 @@ def test_detector_opens_a_check_from_its_link_and_lists_history():
 def test_detector_agent_answer_tab_shows_existing_check(freshness_run):
     execs = requests.get(f"{BACKEND}/runs/{freshness_run['id']}/executions", timeout=10).json()
     target = next(e for e in execs if e["freshness_verdict"] == "stale")
-    at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/7_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
     at.query_params["execution"] = str(target["id"])
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -347,7 +347,7 @@ def test_detector_agent_answer_tab_shows_existing_check(freshness_run):
 
 
 def test_compare_page_freshness_tab(freshness_run):
-    at = AppTest.from_file(str(FRONTEND / "pages/3_Compare.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Compare.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = freshness_run["id"]
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -362,7 +362,7 @@ def test_compare_page_freshness_tab(freshness_run):
 def test_traces_page_links_to_freshness_check(freshness_run):
     execs = requests.get(f"{BACKEND}/runs/{freshness_run['id']}/executions", timeout=10).json()
     target = next(e for e in execs if e["freshness_verdict"])
-    at = AppTest.from_file(str(FRONTEND / "pages/4_Traces.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/6_Traces.py"), default_timeout=TIMEOUT)
     at.query_params["execution"] = str(target["id"])
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -373,7 +373,7 @@ def test_detector_degrades_when_backend_down(monkeypatch):
     import api
 
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/7_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
@@ -381,7 +381,7 @@ def test_detector_degrades_when_backend_down(monkeypatch):
 
 # ------------------------------------------------------------------------------------ phase 6: reports
 def test_reports_page_offers_four_downloads_and_previews(freshness_run):
-    at = AppTest.from_file(str(FRONTEND / "pages/6_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/8_Reports.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = freshness_run["id"]
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -399,12 +399,86 @@ def test_reports_page_empty_and_backend_down(monkeypatch):
     monkeypatch.setattr(
         api, "get", lambda path, **kw: ([], None) if path == "/runs" else real_get(path, **kw)
     )
-    at = AppTest.from_file(str(FRONTEND / "pages/6_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/8_Reports.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception and any("No benchmark results yet" in i.value for i in at.info)
     monkeypatch.setattr(api, "get", real_get)
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    at = AppTest.from_file(str(FRONTEND / "pages/6_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/8_Reports.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception
+    assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
+
+
+# ------------------------------------------------------------------------------------ v2.1: suites
+def _custom_suite() -> dict:
+    name = f"UI suite {uuid.uuid4().hex[:6]}"
+    suite = requests.post(
+        f"{BACKEND}/suites",
+        json={
+            "name": name,
+            "tasks": [
+                {"key": "peru", "prompt": "Capital of Peru?", "expected": "Lima"},
+                {"key": "sum", "prompt": "What is 2+3?", "expected": "5", "scorer": "numeric"},
+            ],
+        },
+        timeout=10,
+    ).json()
+    return suite
+
+
+def test_suites_page_builtin_is_read_only():
+    builtin = next(s for s in requests.get(f"{BACKEND}/suites", timeout=10).json() if s["builtin"])
+    at = AppTest.from_file(str(FRONTEND / "pages/3_Suites.py"), default_timeout=TIMEOUT)
+    at.query_params["suite"] = str(builtin["id"])
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Built-in suite: read-only" in i.value for i in at.info)
+    assert not any(b.label.startswith("💾 Save changes") for b in at.button)
+    assert len(at.get("download_button")) == 2  # YAML + CSV export
+
+
+def test_suites_page_create_blank_suite():
+    name = f"Blank {uuid.uuid4().hex[:6]}"
+    at = AppTest.from_file(str(FRONTEND / "pages/3_Suites.py"), default_timeout=TIMEOUT)
+    at.run()
+    form_name = next(t for t in at.text_input if t.label == "Name")
+    form_name.set_value(name)
+    next(b for b in at.button if b.label == "Create").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any(m.value == f"### {name}" for m in at.markdown)
+    assert any(b.label.startswith("💾 Save changes (0 new") for b in at.button)
+
+
+def test_suites_page_custom_suite_and_scorer_preview():
+    suite = _custom_suite()
+    at = AppTest.from_file(str(FRONTEND / "pages/3_Suites.py"), default_timeout=TIMEOUT)
+    at.query_params["suite"] = str(suite["id"])
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert {m.label: m.value for m in at.metric}["Tasks"] == "2"
+    pick = next(s for s in at.selectbox if s.label == "Task")
+    pick.set_value(next(o for o in pick.options if o.startswith("sum:"))).run()
+    next(t for t in at.text_area if t.label == "Sample answer").set_value("The total is 5.").run()
+    next(b for b in at.button if b.label == "Score it").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("✅ Pass" in s.value for s in at.success)
+
+
+def test_run_benchmark_preselects_suite_being_edited():
+    suite = _custom_suite()
+    at = AppTest.from_file(str(FRONTEND / "pages/4_Run_Benchmark.py"), default_timeout=TIMEOUT)
+    at.session_state["suite_id"] = suite["id"]
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert next(s for s in at.selectbox if s.label == "Task suite").value.startswith(suite["name"])
+
+
+def test_suites_page_degrades_when_backend_down(monkeypatch):
+    import api
+
+    monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
+    at = AppTest.from_file(str(FRONTEND / "pages/3_Suites.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])

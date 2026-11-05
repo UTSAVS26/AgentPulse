@@ -95,7 +95,7 @@ For example, change `LIVE_ACCESS_CODE` to revoke an old code.
 ## Test the deploy image locally (before pushing)
 
 ```bash
-make image-smoke     # build deploy/Dockerfile, run it like the cloud does, 14 smoke checks
+make image-smoke     # build deploy/Dockerfile, run it like the cloud does, 15 smoke checks
                      # leaves it running on :7860 with the TEST code "smoke-test-code" and NO real keys
 make image-live      # (re)start it with your .env keys; unlock code "letmein"
 make image-live LIVE_CODE=my-code

@@ -34,7 +34,7 @@ RUN pip install -r backend/requirements.txt -r frontend/requirements.txt
 
 # Only what the app needs: no tests, no .env (also excluded by .dockerignore).
 COPY --chown=user backend/app backend/app
-COPY --chown=user frontend/Home.py frontend/api.py frontend/ui.py frontend/charts.py frontend/
+COPY --chown=user frontend/Home.py frontend/api.py frontend/ui.py frontend/charts.py frontend/suite_edit.py frontend/
 COPY --chown=user frontend/pages frontend/pages
 COPY --chown=user frontend/.streamlit frontend/.streamlit
 COPY --chown=user bifrost/config.cloud.json bifrost/config.json

@@ -72,10 +72,21 @@ See [agents.md](agents.md) for the runtime semantics.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/suites` | List suites (task count, categories, number of time-sensitive tasks) |
-| GET | `/suites/{id}` | Suite with all its tasks |
-| POST | `/suites` | Create a custom suite → `201` (`409` duplicate name, `422` invalid scorer or duplicate task keys) |
-| DELETE | `/suites/{id}` | Delete → `204` (`409` if any run uses it) |
+| GET | `/suites` | List suites (`builtin`, `runs`, task count, categories, number of time-sensitive tasks) |
+| GET | `/suites/{id}` | Suite with all its tasks (each with `executions`: how many runs used it) |
+| POST | `/suites` | Create a custom suite, tasks optional → `201` (`409` duplicate name, case-insensitive; `422` invalid task or duplicate keys) |
+| PUT | `/suites/{id}` | Rename / re-describe a custom suite |
+| POST | `/suites/{id}/duplicate?name=` | Copy any suite (built-ins too) into a new editable suite → `201` |
+| DELETE | `/suites/{id}` | Delete a custom suite → `204` (`409` if any run uses it) |
+| POST | `/suites/{id}/tasks` | Add a task → `201` (`409` duplicate key) |
+| PUT | `/suites/{id}/tasks/{task_id}` | Edit a task |
+| DELETE | `/suites/{id}/tasks/{task_id}` | Delete a task → `204` (`409` if an execution used it) |
+| GET | `/suites/{id}/export?format=yaml\|csv` | Download the suite as YAML (the seed format) or CSV |
+| POST | `/suites/import?format=yaml\|csv&name=` | Create a suite from a file sent as the raw body (`text/plain`, max 1 MB) → `201` with `warnings`; per-task/line errors → `422` |
+| POST | `/scoring/preview` | Score a sample `output` with `scorer`, `expected`, `tolerance` (no LLM) → `score`, `passed`, `detail`, `expected_rendered` |
+
+Built-in suites are read-only: every edit or delete returns `403` ("duplicate it to edit"). Custom suites
+need no access code, even on the public demo.
 
 ```bash
 curl -s localhost:8000/suites -H 'content-type: application/json' -d '{
@@ -85,6 +96,9 @@ curl -s localhost:8000/suites -H 'content-type: application/json' -d '{
     {"key": "pm", "prompt": "Who is the UK Prime Minister?", "expected": "Burnham", "time_sensitive": true}
   ]
 }'
+# import a CSV file, export as YAML
+curl -s "localhost:8000/suites/import?format=csv&name=My%20CSV" -H 'content-type: text/plain' --data-binary @tasks.csv
+curl -s "localhost:8000/suites/4/export?format=yaml" -o my-suite.yaml
 ```
 
 ## Runs

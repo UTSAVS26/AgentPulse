@@ -144,12 +144,23 @@ class TaskOut(TaskIn):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    executions: int = Field(
+        default=0, description="Executions that used this task (a used task can't be deleted)."
+    )
 
 
 class SuiteCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=4000)
-    tasks: list[TaskIn] = Field(min_length=1)
+    tasks: list[TaskIn] = Field(default_factory=list, description="May be empty: add tasks later.")
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name must not be blank")
+        return v
 
     @field_validator("tasks")
     @classmethod
@@ -161,12 +172,31 @@ class SuiteCreate(BaseModel):
         return v
 
 
+class SuiteUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=4000)
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name must not be blank")
+        return v
+
+
 class SuiteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     description: str
+    builtin: bool = Field(
+        default=False, description="Built-in suites are read-only: duplicate one to edit it."
+    )
+    runs: int = Field(
+        default=0, description="Benchmark runs of this suite (a suite with runs can't be deleted)."
+    )
     task_count: int
     categories: list[str]
     time_sensitive_count: int
@@ -174,6 +204,32 @@ class SuiteOut(BaseModel):
 
 class SuiteDetailOut(SuiteOut):
     tasks: list[TaskOut]
+
+
+class ImportResult(BaseModel):
+    suite: SuiteDetailOut
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ScorePreviewIn(BaseModel):
+    output: str = Field(max_length=8000, examples=["The answer is 1628.89."])
+    scorer: str = Field(default="contains")
+    expected: str = Field(default="", max_length=4000, examples=["1628.89"])
+    tolerance: float = Field(default=0.0, ge=0.0)
+
+    @field_validator("scorer")
+    @classmethod
+    def _known_scorer(cls, v: str) -> str:
+        if v not in SCORERS:
+            raise ValueError(f"unknown scorer '{v}'; available: {list(SCORERS)}")
+        return v
+
+
+class ScorePreviewOut(BaseModel):
+    score: float
+    passed: bool
+    detail: str
+    expected_rendered: str = Field(description="Expected answer after date placeholders are filled in.")
 
 
 # ------------------------------------------------------------------------------------ runs

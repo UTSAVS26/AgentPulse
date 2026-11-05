@@ -92,6 +92,18 @@ def _access_code_box(live: bool) -> None:
             st.error(st.session_state["access_code_error"])
 
 
+def nav_link(target: Any, page: str, label: str, icon: str | None = None) -> None:
+    """``st.page_link`` to ``pages/<n>_<Slug>.py``, falling back to a plain link to ``/<Slug>``.
+
+    The fallback covers pages run as their own entry point (Streamlit's AppTest), where ``page_link``
+    can't resolve sibling pages."""
+    try:
+        target.page_link(page, label=label, icon=icon)
+    except Exception:  # StreamlitPageNotFoundError / APIException outside the multipage app
+        slug = page.rsplit("/", 1)[-1].removesuffix(".py").split("_", 1)[-1]
+        target.markdown(f"{icon + ' ' if icon else ''}[{label}]({slug})")
+
+
 def tile(target: Any, label: str, value: str, sub: str | None = None, help: str | None = None) -> None:
     """A stat tile: label, big value, and an optional plain caption underneath.
 

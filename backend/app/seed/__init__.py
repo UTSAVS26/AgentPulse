@@ -52,6 +52,7 @@ def seed_suites(db: Session, directory: Path = SEED_DIR / "suites") -> int:
             db.add(suite)
             db.flush()
         suite.description = spec.description
+        suite.builtin = True
         existing = {t.key: t for t in suite.tasks}
         for t in spec.tasks:
             fields = t.model_dump()

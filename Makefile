@@ -117,7 +117,7 @@ db-tables:
 # ---------------------------------------------------------------- quality
 test:
 	$(PY) -m pytest backend -q -W error
-	$(PY) -m pytest frontend/tests/test_charts.py -q -W error
+	$(PY) -m pytest frontend/tests/test_charts.py frontend/tests/test_suite_edit.py -q -W error
 
 lint:
 	$(PY) -m ruff check .

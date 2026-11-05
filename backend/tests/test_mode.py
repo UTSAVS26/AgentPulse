@@ -87,7 +87,8 @@ def test_public_destructive_actions_need_code(public):
     assert public.delete(f"/agents/{aid}").status_code == 403
     assert public.delete("/runs/1").status_code == 403
     assert public.post("/runs/1/cancel").status_code == 403
-    assert public.delete("/suites/1").status_code == 403
+    # suites and tasks are open to everyone (v2): no access code needed, only built-ins are protected
+    assert public.delete("/suites/1").status_code == 404
 
     admin = {"X-Access-Code": "s3cret-code"}
     assert public.put(f"/agents/{aid}", json=body, headers=admin).status_code == 200

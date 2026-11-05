@@ -6,7 +6,16 @@ import pandas as pd
 import streamlit as st
 
 import api
-from ui import ANSWER_VERDICTS, RUN_STATUS, leaderboard_frame, page_setup, pct, run_label, show_error
+from ui import (
+    ANSWER_VERDICTS,
+    RUN_STATUS,
+    leaderboard_frame,
+    nav_link,
+    page_setup,
+    pct,
+    run_label,
+    show_error,
+)
 
 health = page_setup("Run Benchmark", "🏁")
 st.title("🏁 Run Benchmark")
@@ -31,8 +40,16 @@ with st.container(border=True):
         + (f" · {s['time_sensitive_count']} time-sensitive" if s["time_sensitive_count"] else ""): s
         for s in suites
     }
-    suite = suite_by_label[st.selectbox("Task suite", list(suite_by_label))]
+    labels_list = list(suite_by_label)
+    wanted = st.session_state.get("suite_id")
+    default_idx = next((i for i, lab in enumerate(labels_list) if suite_by_label[lab]["id"] == wanted), 0)
+    s1, s2 = st.columns([4, 1])
+    suite = suite_by_label[s1.selectbox("Task suite", labels_list, index=default_idx)]
+    st.session_state["suite_id"] = suite["id"]
+    nav_link(s2, "pages/3_Suites.py", "Edit tasks", "🧪")
     st.caption(suite["description"])
+    if not suite["task_count"]:
+        st.warning("This suite has no tasks yet. Add some on the **Suites** page.")
     with st.expander("Show tasks"):
         detail, err = api.get(f"/suites/{suite['id']}")
         if not show_error(err):
@@ -90,7 +107,7 @@ with st.container(border=True):
             st.warning("Local Ollama agents take ~15–30 s per task on CPU, so this run will be slower.")
         if any(a["model"].endswith(":free") for a in selected):
             st.info("Free OpenRouter models are rate-limited. 429s are retried with backoff.")
-    if st.button("Start benchmark", type="primary", disabled=not selected):
+    if st.button("Start benchmark", type="primary", disabled=not selected or not suite["task_count"]):
         run, err = api.post(
             "/runs",
             json={
