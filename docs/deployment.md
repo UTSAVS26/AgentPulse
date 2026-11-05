@@ -21,6 +21,11 @@ push to main ─▶ GitHub CI (lint · tests · Docker stack + UI tests · deplo
 On the public deployment, editing or deleting agents, deleting suites or runs, and cancelling runs also need the
 code, so visitors can't wipe the demo. Each benchmark run records the mode it ran in.
 
+The free plan's disk is temporary: the SQLite database starts empty on every boot, and the backend then seeds
+**demo data** (two finished mock benchmark runs and two example stale-answer checks; see
+[setup.md](setup.md#demo-data)). Visitors therefore never land on empty pages, and the demo resets itself
+after every redeploy or idle spin-down.
+
 ## What runs in the container
 
 [`deploy/Dockerfile`](../deploy/Dockerfile) packs everything into one container (about 230–290 MB RAM, which fits
@@ -90,7 +95,7 @@ For example, change `LIVE_ACCESS_CODE` to revoke an old code.
 ## Test the deploy image locally (before pushing)
 
 ```bash
-make image-smoke     # build deploy/Dockerfile, run it like the cloud does, 13 smoke checks
+make image-smoke     # build deploy/Dockerfile, run it like the cloud does, 14 smoke checks
                      # leaves it running on :7860 with the TEST code "smoke-test-code" and NO real keys
 make image-live      # (re)start it with your .env keys; unlock code "letmein"
 make image-live LIVE_CODE=my-code

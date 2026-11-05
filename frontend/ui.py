@@ -92,6 +92,15 @@ def _access_code_box(live: bool) -> None:
             st.error(st.session_state["access_code_error"])
 
 
+def tile(target: Any, label: str, value: str, sub: str | None = None, help: str | None = None) -> None:
+    """A stat tile: label, big value, and an optional plain caption underneath.
+
+    Used instead of ``st.metric``'s delta, which always draws a ↑/↓ arrow that reads as a trend."""
+    target.metric(label, value, help=help)
+    if sub:
+        target.caption(sub)
+
+
 def show_error(err: str | None) -> bool:
     """Render ``err`` if set; returns True when there was an error."""
     if err:

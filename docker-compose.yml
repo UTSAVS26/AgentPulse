@@ -47,9 +47,10 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agentpulse}:${POSTGRES_PASSWORD:-agentpulse}@postgres:5432/${POSTGRES_DB:-agentpulse}
       LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-120}
       SEARCH_TIMEOUT_S: ${SEARCH_TIMEOUT_S:-20}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
       JUDGE_MODEL: ${JUDGE_MODEL:-groq/openai/gpt-oss-120b}
       FRESHNESS_MODEL: ${FRESHNESS_MODEL:-groq/openai/gpt-oss-120b}
-      FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b}
+      FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free}
       FRESHNESS_SEARCH_DEPTH: ${FRESHNESS_SEARCH_DEPTH:-advanced}
     depends_on:
       postgres:

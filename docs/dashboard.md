@@ -4,12 +4,13 @@ Streamlit app in [`frontend/`](../frontend/). Pages appear in the sidebar in thi
 
 | Page | What it's for |
 |---|---|
-| **Home** | Overview, plus system status and mock/live mode in the sidebar |
+| **Home** | Overview, a snapshot of the latest finished run (top agents, links to Compare, Traces, Detector and Reports), and system status plus mock/live mode in the sidebar |
 | **🤖 Agents** | List, create, edit and delete agents; **try** an agent on one prompt with fault injection and see its trace |
 | **🏁 Run Benchmark** | Configure suite × agents × repeats × fault rate, watch live progress, partial leaderboard, all executions |
 | **📊 Compare** | Multi-agent comparison for one run: headline tiles, leaderboard, charts |
 | **🔍 Traces** | Step-by-step view of a single execution |
 | **🕰️ Stale-Answer Detector** | Check any text, or an agent's answer, for claims that are no longer true (live Tavily sources with dates) |
+| **📄 Reports** | Download a run as Markdown, leaderboard CSV, executions CSV or JSON, with a rendered preview of the Markdown report |
 
 ## Compare page
 

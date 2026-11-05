@@ -16,7 +16,7 @@ mkdir -p /tmp/agentpulse /tmp/bifrost
 cp /app/bifrost/config.json /tmp/bifrost/config.json
 
 # 1) Dashboard: the public port ($PORT, set by Render; 7860 by default).
-(cd /app/frontend && exec streamlit run app.py \
+(cd /app/frontend && exec streamlit run Home.py \
     --server.port="${PORT:-7860}" --server.address=0.0.0.0 --server.headless=true \
     --server.enableCORS=false --server.enableXsrfProtection=false \
     --browser.gatherUsageStats=false) &

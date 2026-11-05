@@ -71,6 +71,15 @@ def main() -> int:
     _, metrics = call("GET", f"/runs/{run['id']}/metrics")
     check("metrics computed", len(metrics.get("leaderboard", [])) == 2, metrics.get("leaderboard"))
 
+    runs = call("GET", "/runs")[1]
+    checks = call("GET", "/freshness/checks")[1]
+    check(
+        "demo data seeded (2 mock runs + example checks)",
+        sum(r["suite_name"] in ("Math & Reasoning", "Current Events (time-sensitive)") for r in runs) >= 3
+        and len(checks) >= 2,
+        [(r["id"], r["suite_name"], r["status"]) for r in runs],
+    )
+
     status, fc = call(
         "POST", "/freshness/check", {"text": "The current UK PM is Rishi Sunak. Water boils at 100 °C."}
     )

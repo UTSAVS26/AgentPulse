@@ -247,6 +247,8 @@ class MockLLMClient:
         if expected is not None:
             accuracy = min(0.99, profile.accuracy + (0.08 if good_tool_result else 0.0))
             answer = expected if rng.random() < accuracy else _perturb(expected, rng)
+            if answer.endswith("."):  # a hedge ("I'm not certain about this."), not an answer
+                return answer, []
             return f"The answer is {answer}.", []
         if good_tool_result:
             return f"Based on the tool result: {good_tool_result[:300]}", []

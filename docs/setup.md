@@ -26,7 +26,7 @@ cp .env.example .env
 | `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `120` / `20` | Outbound request timeouts |
 | `LIVE_ACCESS_CODE` | – | Public-demo mode: with `MOCK_MODE=true`, requests are mock unless they send this code (dashboard sidebar → *Unlock live mode*). Admin actions also need it. See [deployment.md](deployment.md). |
 | `JUDGE_MODEL` | `groq/openai/gpt-oss-120b` | Model used by the `judge` scorer (live mode) |
-| `FRESHNESS_MODEL` / `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-120b` / `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b` | Stale-answer detector's extraction + judge model, then fallbacks on rate limits. See [stale-answer-detection.md](stale-answer-detection.md#configuration). |
+| `FRESHNESS_MODEL` / `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-120b` / `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free` | Stale-answer detector's extraction + judge model, then fallbacks on rate limits. See [stale-answer-detection.md](stale-answer-detection.md#configuration). |
 | `FRESHNESS_SEARCH_DEPTH` | `advanced` | Tavily depth for automatic checks during benchmark runs |
 
 Provider keys are read **only by Bifrost** (see `bifrost/config.json`, which uses `env.` references). The backend never sees them.
@@ -135,10 +135,22 @@ With `MOCK_MODE=true` (the default) **no network calls are made** to LLM provide
 |---|---|---|
 | Bifrost → LLMs | `MockLLMClient` | Each model has a profile (accuracy, latency, verbosity, failure rate, tool use, recovery). It calls the right tool (calculator, current_date, web_search), retries failed tools, and answers from a task answer key with accuracy-weighted correctness. Seeded, so results are reproducible. |
 | Tavily | `MockSearchClient` | Dated "news" corpus for demo topics (e.g. the UK Prime Minister changed in July 2026) plus generic results for anything else. Mock URLs use `mock.agentpulse.local`. |
+| Stale-answer judge | `mock_freshness` responder | Answers the detector's extraction and judge prompts from the same corpus (current vs stale answer per topic), so the detector runs the same pipeline offline. |
 
 Settings: `MOCK_SEED` (default `42`) changes the simulated outcomes. `MOCK_LATENCY_SCALE` (default `0.25`) controls how long the mock actually waits: `0` is instant and `1` is realistic. Reported latencies are always the realistic, unscaled values.
 
 The dashboard sidebar and `/health` (`"mock_mode": true`) always show which mode is active, and every benchmark run records the mode it ran in.
+
+## Demo data
+
+On a database with **no runs** (first start, or after `make reset`), the backend seeds:
+
+- two mock benchmark runs in the background, Math & Reasoning and Current Events, each with 4 agents ×
+  2 repeats and 20% tool faults; they finish in about a minute;
+- two example stale-answer checks (Detector → History).
+
+Every page has content on first open. The demo runs are always **mock** (labelled so everywhere), cost
+nothing, and are never re-created once any run exists. Turn this off with `SEED_DEMO_DATA=false`.
 
 ## Switching between mock and live mode
 
@@ -170,4 +182,6 @@ make reset     # = docker compose down -v  (stop and wipe the database + Bifrost
 | Port already in use (5432/8000/8080/8501) | Stop the conflicting service, or change the left side of the port mapping in `docker-compose.yml`. |
 | Dashboard says "Cannot reach the backend" | `docker compose logs backend` |
 | `/health` returns `"status":"degraded"` | Check the component with `"ok": false`. `llm` → Bifrost is down (`make ps`). `database` → Postgres is down. `search` → `TAVILY_API_KEY` is missing in live mode. |
+| Live runs or freshness checks: `rate_limited [429] … tokens per day (TPD)` | Groq's free tier has a daily token quota per model (about 200k). Wait for the reset, use other models, or set `FRESHNESS_MODEL` to a model your agents don't use. See [stale-answer-detection.md](stale-answer-detection.md#quota-planning-for-a-live-demo). |
+| Freshness verdicts are all *unverifiable* | Read a claim's explanation: `search-error` means Tavily (check `TAVILY_API_KEY` and credits), `llm-error` means the judge models are rate-limited. |
 | VS Code shows "Unable to import 'fastapi'" etc. | The editor is using a different Python. Run **Python: Select Interpreter** and pick `.venv`. |

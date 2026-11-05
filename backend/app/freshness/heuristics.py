@@ -159,6 +159,8 @@ def strong_signal(text: str) -> bool:
 def is_factual(sentence: str) -> bool:
     """Skip hedges, questions, fragments and pleasantries."""
     s = sentence.strip()
+    if HEDGE.match(strip_filler(s)):  # also "The answer is I'm not sure."
+        return False
     if len(s.split()) < 2 or s.endswith("?") or HEDGE.match(s):
         return False
     return bool(re.search(r"[A-Za-z]", s))

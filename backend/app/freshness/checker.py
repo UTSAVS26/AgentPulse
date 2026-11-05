@@ -115,22 +115,40 @@ def overall_verdict(claims: list[ClaimCheck]) -> str:
 
 
 # ------------------------------------------------------------------------------------ parsing
-def parse_json_reply(text: str) -> Any:
-    """Parse a model's JSON reply, tolerating code fences and prose around the JSON."""
-    if not text:
+def parse_json_reply(text: str, require: str | None = None) -> Any:
+    """Parse a model's JSON reply, tolerating code fences, prose and ``<think>`` blocks around it.
+
+    With ``require``, the last JSON object containing that key wins (reasoning models may write other
+    braces before their final answer)."""
+    if not text or not text.strip():
         raise ValueError("empty reply")
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE)
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
     try:
-        return json.loads(cleaned)
+        data = json.loads(cleaned)
+        if require is None or (isinstance(data, dict) and require in data):
+            return data
     except ValueError:
         pass
     decoder = json.JSONDecoder()
-    for i, ch in enumerate(cleaned):
-        if ch in "{[":
+    found: list[Any] = []
+    i = 0
+    while i < len(cleaned):
+        if cleaned[i] in "{[":
             try:
-                return decoder.raw_decode(cleaned[i:])[0]
-            except ValueError:
+                obj, length = decoder.raw_decode(cleaned[i:])
+                found.append(obj)
+                i += length
                 continue
+            except ValueError:
+                pass
+        i += 1
+    if require is not None:
+        matches = [o for o in found if isinstance(o, dict) and require in o]
+        if matches:
+            return matches[-1]
+    if found:
+        return found[0]
     raise ValueError("no JSON found in reply")
 
 
@@ -364,14 +382,20 @@ class FreshnessChecker:
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
         last: LLMError | None = None
-        for round_ in range(4):
+        for round_ in range(6):  # waits 2+4+8+16+30 s: covers a full per-minute window
             minute_limited = False
             for model in _cooldowns.order(self.llm, self.models):
                 if round_ and _cooldowns.out_for_the_day(self.llm, model):
                     continue
                 for attempt in range(3):
                     try:
-                        return self.llm.chat(model, messages, temperature=0.0, max_tokens=max_tokens).content
+                        res = self.llm.chat(model, messages, temperature=0.0, max_tokens=max_tokens)
+                        if not (res.content or "").strip() and res.finish_reason == "length":
+                            # a reasoning model spent the whole budget thinking: try the next model
+                            raise LLMError(
+                                "empty reply (token budget used up)", retryable=False, kind="truncated"
+                            )
+                        return res.content
                     except LLMError as exc:
                         last = exc
                         if exc.kind == "rate_limited":
@@ -390,7 +414,7 @@ class FreshnessChecker:
         payload: dict[str, Any] = {"today": self.today.isoformat(), "text": text}
         if question:
             payload["question"] = question
-        data = parse_json_reply(self._chat(EXTRACT_SYSTEM, payload, max_tokens=2000))
+        data = parse_json_reply(self._chat(EXTRACT_SYSTEM, payload, max_tokens=4096), require="claims")
         items = data.get("claims") if isinstance(data, dict) else data
         if not isinstance(items, list):
             raise ValueError("no 'claims' list in reply")
@@ -481,7 +505,7 @@ class FreshnessChecker:
             ],
         }
         try:
-            data = parse_json_reply(self._chat(VERIFY_SYSTEM, payload, max_tokens=1500))
+            data = parse_json_reply(self._chat(VERIFY_SYSTEM, payload, max_tokens=4096), require="verdict")
             if not isinstance(data, dict):
                 raise ValueError("reply is not an object")
             verdict = str(data.get("verdict", "")).strip().lower()

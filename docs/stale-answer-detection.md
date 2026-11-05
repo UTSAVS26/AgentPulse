@@ -104,14 +104,15 @@ against the server clock (UTC), not searched. An earlier year is `outdated`, a l
 | Extraction LLM error or unparseable reply | Rule-based extraction; `extraction` says `heuristic (LLM …)` |
 | Tavily error (retried once if transient) | `unverifiable`, method `search-error` |
 | No search results | `unverifiable`, method `no-sources` |
+| A reasoning model spends its whole token budget and returns nothing | Next model in the chain |
 | Judge error, unparseable reply or unknown verdict | `unverifiable`, method `llm-error`; the sources and Tavily's summary are kept |
 
 **Model fallback and rate limits.** The checker uses `FRESHNESS_MODEL`, then `FRESHNESS_FALLBACK_MODELS` in
-order:
+order. The default chain ends on a free OpenRouter model, so a provider whose quota is exhausted for the day doesn't stop checks:
 
 - A 429 benches that model: for an hour if it is a **daily** quota ("tokens per day"), or for 20 s if it is a
   per-minute limit. The next model is tried immediately.
-- If every model is rate-limited, the checker waits out the per-minute limits (2 s, 4 s, 8 s) and tries
+- If every model is rate-limited, the checker waits out the per-minute limits (2, 4, 8, 16 and 30 s, which covers a full one-minute window) and tries
   again, skipping daily-exhausted models.
 - Benched models are tried last on later requests.
 
@@ -149,7 +150,7 @@ parsing, offline:
 | Variable | Default | Purpose |
 |---|---|---|
 | `FRESHNESS_MODEL` | `groq/openai/gpt-oss-120b` | Extraction and judge model (live) |
-| `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b` | Tried in order when rate-limited or failing |
+| `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free` | Tried in order when rate-limited or failing |
 | `FRESHNESS_SEARCH_DEPTH` | `advanced` | Tavily depth for automatic checks in runs (advanced = 2 credits, much better dated sources; basic = 1) |
 | `TAVILY_API_KEY` | | Required for live verification |
 
@@ -177,3 +178,6 @@ If a quota runs out anyway, verdicts degrade to `unverifiable` with the reason, 
 | "Elon Musk is the current UK Prime Minister." | ❌ contradicted (0.99) | Same UK sources |
 | "Water boils at 100 °C at sea level." | ➖ timeless | not searched |
 | "It is 2024." | ⚠️ outdated | clock |
+
+Later the same day, with **every Groq model's daily quota used up**, the fallback chain reached the free
+OpenRouter model, which returned the same verdicts: Argentina → outdated, Elon Musk → contradicted, water → timeless.

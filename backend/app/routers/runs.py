@@ -113,7 +113,12 @@ def get_run(run_id: int, db: Session = Depends(get_db)) -> RunOut:
     summary="All executions of a run (without traces; see /executions/{id})",
 )
 def run_executions(run_id: int, db: Session = Depends(get_db)) -> list[RunExecutionOut]:
-    run = _get_run(db, run_id)
+    return execution_rows(db, _get_run(db, run_id))
+
+
+def execution_rows(db: Session, run: BenchmarkRun) -> list[RunExecutionOut]:
+    """Every execution of ``run`` with agent and task names (shared with reports)."""
+    run_id = run.id
     agents = _agent_info(db, run.agent_ids)
     tasks = {t.id: t for t in db.scalars(select(Task).where(Task.suite_id == run.suite_id))}
     rows = db.scalars(
@@ -146,7 +151,12 @@ def run_executions(run_id: int, db: Session = Depends(get_db)) -> list[RunExecut
     ),
 )
 def get_run_metrics(run_id: int, db: Session = Depends(get_db)) -> dict:
-    run = _get_run(db, run_id)
+    return metrics_payload(db, _get_run(db, run_id))
+
+
+def metrics_payload(db: Session, run: BenchmarkRun) -> dict:
+    """The `/runs/{id}/metrics` body (shared with reports, so both show identical numbers)."""
+    run_id = run.id
     records = [
         ExecRecord.from_orm(e)
         for e in db.scalars(select(TaskExecution).where(TaskExecution.run_id == run_id))

@@ -13,6 +13,7 @@ retry is visible in the execution trace.
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -47,6 +48,15 @@ class LLMResponse:
         return self.prompt_tokens + self.completion_tokens
 
 
+_ORG_ID = re.compile(r"\s*in organi[sz]ation `?[\w-]+`?", re.IGNORECASE)
+
+
+def redact(message: str) -> str:
+    """Strip account identifiers (e.g. Groq's ``in organization `org_…```) from provider errors, since they
+    end up in the database, the UI and exported reports."""
+    return _ORG_ID.sub("", message)
+
+
 class LLMError(Exception):
     """A failed LLM call.
 
@@ -55,6 +65,7 @@ class LLMError(Exception):
     """
 
     def __init__(self, message: str, *, retryable: bool, status_code: int | None = None, kind: str = ""):
+        message = redact(message)
         super().__init__(message)
         self.message = message
         self.retryable = retryable

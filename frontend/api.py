@@ -79,3 +79,17 @@ def delete(path: str, **kwargs: Any) -> tuple[Any | None, str | None]:
 
 def health(code: str | None = None) -> tuple[dict | None, str | None]:
     return get("/health", timeout=5, code=code)
+
+
+def download(path: str, params: dict | None = None, timeout: float = 60) -> tuple[bytes | None, str | None]:
+    """Raw response body (for report downloads), never JSON-decoded."""
+    headers = {ACCESS_CODE_HEADER: code} if (code := access_code()) else {}
+    try:
+        res = requests.get(f"{BACKEND_URL}{path}", params=params, headers=headers, timeout=timeout)
+    except requests.ConnectionError:
+        return None, f"Cannot reach the backend at {BACKEND_URL}. Is it running?"
+    except requests.Timeout:
+        return None, f"The backend took longer than {timeout:.0f}s to respond."
+    if not res.ok:
+        return None, _format_error(res)
+    return res.content, None

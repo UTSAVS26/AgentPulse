@@ -191,3 +191,16 @@ def test_bifrost_400_tool_validation_is_classified_as_invalid_tool_call():
     with pytest.raises(LLMError) as exc:
         client.chat(MODEL, [{"role": "user", "content": "x"}])
     assert exc.value.kind == "invalid_tool_call" and exc.value.retryable
+
+
+def test_provider_errors_are_redacted_of_account_ids():
+    from app.clients.llm import LLMError
+
+    exc = LLMError(
+        "Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01abcDEF` "
+        "service tier on_demand",
+        retryable=True,
+        kind="rate_limited",
+    )
+    assert "org_" not in exc.message and "org_" not in str(exc)
+    assert exc.message == "Rate limit reached for model `openai/gpt-oss-20b` service tier on_demand"

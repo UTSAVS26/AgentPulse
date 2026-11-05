@@ -2,6 +2,52 @@
 
 All notable changes per build phase.
 
+## [Phase 7] Demo hardening & final docs
+
+### Added
+- **Demo data on an empty database**: two mock benchmark runs (Math & Reasoning and Current Events, 4 agents × 2 repeats, 20% faults) and two example stale-answer checks.
+  - They are seeded on startup on their own thread and finish in about a minute.
+  - They are never re-created once any run exists. `SEED_DEMO_DATA=false` turns them off.
+  - On Render, where the disk resets on every boot, visitors therefore never land on empty pages.
+- **Home** shows the latest finished run (top agents) with links to Compare, Traces, Detector and Reports.
+- **README** rewritten: what it answers, a feature table, how the Bifrost and Tavily challenges are used, live-validated results, the architecture, quickstart, live mode, a docs index and the repo layout. It includes real screenshots (`docs/images/`, taken with headless Chromium against the running stack).
+- **`docs/DEMO_SCRIPT.md`**: a 4–5 minute click path with talking points, a pre-flight checklist (including quota planning) and a fallback plan.
+- The deploy-image smoke test checks the demo data too (14 checks).
+
+### Changed
+- `frontend/app.py` → `frontend/Home.py`, so the sidebar's first entry reads **Home** instead of "app".
+- Stat tiles show the value large with a plain caption underneath. `st.metric` deltas always draw a ↑ arrow that read as a trend ("↑ 0 stale of 12 checked"), and agent names were cut off ("GPT-OSS 20…").
+- Freshness model chain: the default fallbacks now end on a free **OpenRouter** model, so checks keep working when every Groq model's daily quota is used up. Verified live.
+
+### Fixed (found in the final end-to-end pass)
+- The stale-answer judge again called "Argentina won the latest World Cup" *contradicted* ("Argentina was not the latest champion"). The judge now decides `was_true_before` first, with an explicit definition for "current/latest" claims.
+- Waits for per-minute rate limits now cover a full one-minute window (2→30 s). Before, they gave up after 14 s while a benchmarked agent shared the same quota.
+- Reasoning models (e.g. Nemotron) spent the whole 1,500-token budget thinking and returned empty content, so their verdicts were "unparseable". The budget is now 4,096 tokens, an empty truncated reply moves on to the next model, and the JSON parser skips `<think>` blocks and picks the object that has the expected key.
+- **Groq organisation IDs** in provider error messages (which end up in the database, the UI and reports) are now redacted when the error is created.
+- Rule-based extraction treated "The answer is I'm not certain…" as a claim: hedges are now detected after the lead-in is stripped. The mock model no longer wraps hedges in "The answer is…".
+
+### Final gate
+- Clean state: `make reset && make up` → all services healthy, and both demo runs finished in under a minute.
+- `make check`: lint, both Bifrost configs, 234 backend tests and 18 chart tests, also in a clean Linux container.
+- `make ui-test`: 39 page tests against the fresh stack. Container logs had 0 tracebacks.
+- `make image-smoke`: 14/14 checks.
+- Live:
+  - `make live-check`: 7/7 (Groq, OpenRouter, Ollama, tool calling, Tavily).
+  - A live benchmark with a live report, and live detector verdicts. These were also confirmed with every Groq quota exhausted, through the OpenRouter fallback.
+
+## [Phase 6] Benchmark and reliability reports
+
+### Added
+- `GET /reports/{run_id}` in three formats. Every number comes from the same code as `/runs/{id}/metrics`, so reports always match the dashboard.
+  - `format=md`: highlights, leaderboard, reliability detail, accuracy by category, pass rate per task, freshness with each stale answer's correction and newest source, and failed executions.
+  - `format=csv`: `table=leaderboard` or `table=executions`.
+  - `format=json`: everything, including every execution.
+  - Downloads are named `agentpulse-run-<id>…`. `download=false` shows the report inline. A report for an in-progress run is marked partial.
+- **📄 Reports** page: four download buttons and a rendered preview of the Markdown report.
+- `docs/examples/`: a report and leaderboard CSV exported from a live run (Groq via Bifrost + Tavily).
+- Refactor: the runs router exposes `metrics_payload()` and `execution_rows()`, which the reports reuse.
+- Tests: 7 report tests (formats, equality with the metrics endpoint, freshness section, escaping, partial runs) and 2 page tests.
+
 ## [Phase 5] Stale-answer detection with live Tavily verification
 
 ### Added

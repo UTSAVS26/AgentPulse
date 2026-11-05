@@ -41,7 +41,7 @@ def app(page: str) -> AppTest:
 
 
 def test_home_renders_with_status_sidebar():
-    at = app("app.py")
+    at = app("Home.py")
     assert at.title[0].value == "📈 AgentPulse"
     sidebar_text = " ".join(m.value for m in at.sidebar.markdown) + " ".join(
         w.value for w in [*at.sidebar.warning, *at.sidebar.info]
@@ -89,7 +89,7 @@ def test_pages_degrade_gracefully_when_backend_is_down(monkeypatch):
     import api
 
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")  # nothing listens here
-    for page in ("app.py", "pages/1_Agents.py"):
+    for page in ("Home.py", "pages/1_Agents.py"):
         at = AppTest.from_file(str(FRONTEND / page), default_timeout=TIMEOUT)
         at.run()
         assert not at.exception, [e.value for e in at.exception]
@@ -175,7 +175,7 @@ def test_public_deployment_access_code_unlock_flow(monkeypatch):
         return None, "Backend error 401: invalid access code"
 
     monkeypatch.setattr(api, "health", fake_health)
-    at = AppTest.from_file(str(FRONTEND / "app.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "Home.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception
     assert any("MOCK MODE" in w.value for w in at.sidebar.warning)
@@ -376,4 +376,35 @@ def test_detector_degrades_when_backend_down(monkeypatch):
     at = AppTest.from_file(str(FRONTEND / "pages/5_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
+    assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
+
+
+# ------------------------------------------------------------------------------------ phase 6: reports
+def test_reports_page_offers_four_downloads_and_previews(freshness_run):
+    at = AppTest.from_file(str(FRONTEND / "pages/6_Reports.py"), default_timeout=TIMEOUT)
+    at.session_state["run_id"] = freshness_run["id"]
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    buttons = at.get("download_button")
+    assert len(buttons) == 4
+    text = " ".join(m.value for m in at.markdown)
+    assert f"# AgentPulse benchmark report: run #{freshness_run['id']}" in text
+    assert "## Freshness (stale-answer detection)" in text
+
+
+def test_reports_page_empty_and_backend_down(monkeypatch):
+    import api
+
+    real_get = api.get
+    monkeypatch.setattr(
+        api, "get", lambda path, **kw: ([], None) if path == "/runs" else real_get(path, **kw)
+    )
+    at = AppTest.from_file(str(FRONTEND / "pages/6_Reports.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception and any("No benchmark results yet" in i.value for i in at.info)
+    monkeypatch.setattr(api, "get", real_get)
+    monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
+    at = AppTest.from_file(str(FRONTEND / "pages/6_Reports.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])

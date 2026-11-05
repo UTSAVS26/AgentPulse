@@ -28,8 +28,8 @@
 
 | Component | Responsibility | Status |
 |---|---|---|
-| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark, Compare, Traces, Stale-Answer Detector (`ui.py` helpers, `charts.py` Plotly builders) |
-| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs, freshness APIs; agent runtime; benchmark engine (scoring, pricing, metrics); stale-answer detector |
+| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark, Compare, Traces, Stale-Answer Detector, Reports (`ui.py` helpers, `charts.py` Plotly builders) |
+| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs, freshness, reports APIs; agent runtime; benchmark engine (scoring, pricing, metrics); stale-answer detector; demo-data seeding |
 | **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
 | **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer detector. | Verified live (agents and detector) |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
@@ -77,6 +77,14 @@ backend/app/freshness/
 
 Used by `POST /freshness/check` (`routers/freshness.py`) and by the benchmark engine on answers to time-sensitive
 tasks. Details: [stale-answer-detection.md](stale-answer-detection.md).
+
+### Reports and demo data
+
+- `app/reports.py` builds a run report from `metrics_payload()` and `execution_rows()` in `routers/runs.py`
+  (the same functions behind `/runs/{id}/metrics` and `/runs/{id}/executions`) and renders it as Markdown, CSV
+  or JSON (`GET /reports/{id}`).
+- `app/seed/demo.py`: on a database with no runs, startup seeds two mock benchmark runs (on their own thread,
+  so the engine's run workers stay free) and two example freshness checks. See [setup.md](setup.md#demo-data).
 
 ## Data model
 

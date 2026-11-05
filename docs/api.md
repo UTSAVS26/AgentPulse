@@ -157,6 +157,24 @@ Response (abridged, live):
 
 `GET /executions/{id}` includes `freshness_verdict` and `freshness_check_id` (the latest check of that answer).
 
-## Coming in later phases
+## Reports
 
-Reports (Phase 6).
+| Method | Path | Description |
+|---|---|---|
+| GET | `/reports/{run_id}?format=md` | Readable report: highlights, leaderboard, reliability detail, accuracy by category, pass rate per task, freshness and stale answers (with what is true today and the newest source), failed executions |
+| GET | `/reports/{run_id}?format=csv&table=leaderboard` | One row per agent, every metric (raw numbers: ratios 0–1, latency in ms, cost in USD) |
+| GET | `/reports/{run_id}?format=csv&table=executions` | One row per attempt (answer, pass/fail, why, tokens, cost, faults, freshness verdict) |
+| GET | `/reports/{run_id}?format=json` | Everything above plus every execution, as one document (`report_version: 1`) |
+
+Responses are file downloads (`Content-Disposition: attachment; filename="agentpulse-run-<id>….<ext>"`). Add
+`download=false` to view inline. Numbers come from the same code as `GET /runs/{id}/metrics`, so they always
+match the dashboard. A run still in progress gives a report marked *partial*. `404` for an unknown run, `422`
+for an unknown format.
+
+```bash
+curl -s "localhost:8000/reports/1?format=md" -o run-1.md
+curl -s "localhost:8000/reports/1?format=csv&table=executions" -o run-1-executions.csv
+```
+
+Example generated from a live run: [examples/live-run-report.md](examples/live-run-report.md)
+([leaderboard CSV](examples/live-run-leaderboard.csv)).

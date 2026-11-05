@@ -38,9 +38,11 @@ class Settings(BaseSettings):
     freshness_model: str = "groq/openai/gpt-oss-120b"
     """Model that extracts claims and judges them against Tavily sources (stale-answer detector)."""
 
-    freshness_fallback_models: str = "groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b"
-    """Comma-separated models tried in order when the main one is rate-limited or failing
-    (each Groq model has its own daily token quota)."""
+    freshness_fallback_models: str = (
+        "groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free"
+    )
+    """Comma-separated models tried in order when the main one is rate-limited or failing (each Groq
+    model has its own daily token quota; the OpenRouter free model is a different provider altogether)."""
 
     @property
     def freshness_models(self) -> list[str]:
@@ -54,6 +56,10 @@ class Settings(BaseSettings):
 
     seed_on_startup: bool = True
     """Insert the default demo agents on startup (existing agents are never modified)."""
+
+    seed_demo_data: bool = True
+    """When the database has no runs, create two mock demo runs and two example freshness checks
+    (requires ``seed_on_startup``)."""
 
     mock_seed: int = 42
     """Seed for the mock LLM/search so demo runs are reproducible."""

@@ -16,6 +16,7 @@ from ui import (
     run_label,
     secs,
     show_error,
+    tile,
     usd,
 )
 
@@ -60,14 +61,14 @@ priced = [r for r in board if r["cost_per_correct_usd"] is not None]
 cheapest = min(priced, key=lambda r: r["cost_per_correct_usd"]) if priced else None
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("🏆 Most reliable", best["agent_name"], pct(best["reliability_score"]), delta_color="off")
-c2.metric("🎯 Most accurate", most_accurate["agent_name"], pct(most_accurate["accuracy"]), delta_color="off")
-c3.metric("⚡ Fastest (p50)", fastest["agent_name"], secs(fastest["latency_ms_p50"]), delta_color="off")
-c4.metric(
+tile(c1, "🏆 Most reliable", pct(best["reliability_score"]), f"**{best['agent_name']}**")
+tile(c2, "🎯 Most accurate", pct(most_accurate["accuracy"]), f"**{most_accurate['agent_name']}**")
+tile(c3, "⚡ Fastest (p50)", secs(fastest["latency_ms_p50"]), f"**{fastest['agent_name']}**")
+tile(
+    c4,
     "💰 Cheapest per correct answer",
-    cheapest["agent_name"] if cheapest else "–",
-    usd(cheapest["cost_per_correct_usd"]) if cheapest else "no correct answers",
-    delta_color="off",
+    usd(cheapest["cost_per_correct_usd"]) if cheapest else "–",
+    f"**{cheapest['agent_name']}**" if cheapest else "no correct answers",
 )
 
 st.markdown("#### Leaderboard")
@@ -168,11 +169,11 @@ with tab_failures:
     cols = st.columns(len(board)) if len(board) <= 4 else None
     for i, r in enumerate(board):
         target = cols[i] if cols else st
-        target.metric(
+        tile(
+            target,
             r["agent_name"],
             f"{r['recovered']}/{r['executions_with_failures']} recovered",
             f"{r['faults_injected']} faults · {r['llm_retries']} retries · {pct(r['error_rate'])} errors",
-            delta_color="off",
             help="Recovered = a failure happened (injected fault, tool error, rejected tool call or "
             "LLM retry) and the task was still answered correctly.",
         )
@@ -216,11 +217,11 @@ if has_freshness:
         fresh_board = [r for r in board if r.get("freshness_checked")]
         cols = st.columns(len(fresh_board)) if len(fresh_board) <= 4 else None
         for i, r in enumerate(fresh_board):
-            (cols[i] if cols else st).metric(
+            tile(
+                cols[i] if cols else st,
                 r["agent_name"],
                 pct(r["freshness"]),
                 f"{r['stale_answers']} stale of {r['freshness_checked']} checked",
-                delta_color="off",
                 help="Freshness = mean share of an answer's time-sensitive claims that are current.",
             )
         st.plotly_chart(charts.freshness_bars(board), use_container_width=True, config=CHART_CFG)

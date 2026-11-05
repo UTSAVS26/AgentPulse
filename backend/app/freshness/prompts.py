@@ -45,10 +45,12 @@ claim names something that held the role, title, record or "latest" spot at an e
 champion, a former office holder, an earlier version), even if the sources only talk about the new one.
 "Contradicted" is only for claims that were never true.
 
-"was_true_before": true when the claim correctly described the situation at some earlier time (the team
-did win the previous tournament; the person did hold the office before), even if it is not true today.
+Decide "was_true_before" FIRST: true when the claim would have been correct at some earlier date. For claims
+about the "current", "latest" or "most recent" holder of something, it is true when the named subject WAS
+that holder before (it won the previous edition; the person held the office before; it was the newest version
+before a newer one shipped). Then: not true today + was_true_before = "outdated"; never true = "contradicted".
 
 Reply with ONLY a JSON object, no prose:
-{"verdict": "current|outdated|contradicted|unverifiable", "was_true_before": true|false,
+{"was_true_before": true|false, "verdict": "current|outdated|contradicted|unverifiable",
  "confidence": 0.0-1.0, "explanation": "one or two sentences that cite the sources' dates",
  "correction": "what is true today if the claim is not current, otherwise empty"}"""

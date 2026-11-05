@@ -112,6 +112,7 @@ def test_signals_and_sentence_splitting():
 
 def test_heuristic_claims_skip_hedges_and_use_question_context():
     assert heuristics.heuristic_claims("I'm not certain about this.") == []
+    assert heuristics.heuristic_claims("The answer is I'm not certain about this.", question="Who won?") == []
     [c] = heuristics.heuristic_claims("The answer is Keir Starmer.", question="Who is the current UK PM?")
     assert c.text.startswith("Keir Starmer") and c.time_sensitive and c.query == "Who is the current UK PM?"
 
@@ -502,3 +503,33 @@ def test_contradicted_but_true_before_is_outdated(was_true_before, expected):
     verify = json.dumps({"verdict": "contradicted", "was_true_before": was_true_before, "confidence": 0.9})
     [c] = checker(llm=ScriptedLLM(extract, verify)).check("x").claims
     assert c.verdict == expected
+
+
+def test_parse_json_reply_picks_the_answer_object_after_reasoning():
+    reply = (
+        '<think>maybe {"draft": 1}</think> I considered {"x": 2}. '
+        'Final: {"verdict": "outdated", "confidence": 0.9}'
+    )
+    assert parse_json_reply(reply, require="verdict") == {"verdict": "outdated", "confidence": 0.9}
+    assert parse_json_reply('{"a": 1} {"claims": []}', require="claims") == {"claims": []}
+    assert parse_json_reply('{"a": 1}', require="claims") == {"a": 1}  # caller validates the shape
+
+
+def test_truncated_empty_reply_moves_on_to_the_next_model():
+    class Thinker(ScriptedLLM):
+        def chat(self, model, messages, **kw):
+            self.tried = [*getattr(self, "tried", []), model]
+            if model == "m/thinker":
+                return LLMResponse(
+                    content="",
+                    tool_calls=[],
+                    prompt_tokens=1,
+                    completion_tokens=4096,
+                    latency_ms=1,
+                    finish_reason="length",
+                )
+            return super().chat(model, messages, **kw)
+
+    llm = Thinker(extract='{"claims": []}')
+    ch = FreshnessChecker(llm, CountingSearch(), ["m/thinker", "m/ok"], today=TODAY, retry_backoff_s=0)
+    assert ch.check("Some text here.").extraction == "llm" and llm.tried == ["m/thinker", "m/ok"]
