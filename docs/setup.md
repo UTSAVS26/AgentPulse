@@ -41,7 +41,7 @@ make up                  # = docker compose up --build -d --wait && docker compo
 
 ```bash
 make health
-# curl http://localhost:8000/health   -> {"status":"ok","version":"0.1.0","mock_mode":true}
+# curl http://localhost:8000/health   -> {"status":"ok","mock_mode":true,"components":{"database":{"ok":true,...},"llm":{...},"search":{...}}}
 # curl http://localhost:8080/health   -> {"components":{"db_pings":"ok"},"status":"ok"}
 # curl http://localhost:8501/_stcore/health -> ok
 ```
@@ -107,6 +107,27 @@ Models verified on 2026-11-05 (provider catalogs change; check `/v1/models` if o
 
 Free OpenRouter models are rate-limited. A `429` means "retry later", not a configuration error.
 
+## Verifying all real integrations at once
+
+```bash
+make live-check
+```
+
+This runs inside the backend container and ignores `MOCK_MODE`. It checks Bifrost health, lists models, sends a prompt to Groq, OpenRouter and Ollama, makes one real tool call, and runs a Tavily news search. Expected result: `7/7 checks passed`. See [bifrost.md](bifrost.md#verifying) for sample output.
+
+## Mock mode
+
+With `MOCK_MODE=true` (the default) **no network calls are made** to LLM providers or Tavily:
+
+| Real | Mock replacement | Behaviour |
+|---|---|---|
+| Bifrost → LLMs | `MockLLMClient` | Each model has a profile (accuracy, latency, verbosity, failure rate, tool use, recovery). It calls the right tool (calculator, current_date, web_search), retries failed tools, and answers from a task answer key with accuracy-weighted correctness. Seeded, so results are reproducible. |
+| Tavily | `MockSearchClient` | Dated "news" corpus for demo topics (e.g. the UK Prime Minister changed in July 2026) plus generic results for anything else. Mock URLs use `mock.agentpulse.local`. |
+
+Settings: `MOCK_SEED` (default `42`) changes the simulated outcomes. `MOCK_LATENCY_SCALE` (default `0.25`) controls how long the mock actually waits: `0` is instant and `1` is realistic. Reported latencies are always the realistic, unscaled values.
+
+The dashboard sidebar and `/health` (`"mock_mode": true`) always show which mode is active, and every benchmark run records the mode it ran in.
+
 ## Switching between mock and live mode
 
 Either edit `MOCK_MODE` in `.env` and run `make restart`, or override it for one start:
@@ -136,3 +157,5 @@ make reset     # = docker compose down -v  (stop and wipe the database + Bifrost
 | Bifrost → Ollama: `connection to private IP ... is not allowed` | `network_config.allow_private_network` is missing from the `ollama` provider in `bifrost/config.json`. |
 | Port already in use (5432/8000/8080/8501) | Stop the conflicting service, or change the left side of the port mapping in `docker-compose.yml`. |
 | Dashboard says "Cannot reach the backend" | `docker compose logs backend` |
+| `/health` returns `"status":"degraded"` | Check the component with `"ok": false`. `llm` → Bifrost is down (`make ps`). `database` → Postgres is down. `search` → `TAVILY_API_KEY` is missing in live mode. |
+| VS Code shows "Unable to import 'fastapi'" etc. | The editor is using a different Python. Run **Python: Select Interpreter** and pick `.venv`. |

@@ -15,7 +15,7 @@ still true today, extracting time-sensitive claims and verifying them against li
 | Scoring, reliability & freshness analytics | AgentPulse evaluation engine |
 | API / UI / storage | FastAPI · Streamlit · PostgreSQL |
 
-> **Status:** Phase 0 of 7. The infrastructure skeleton is running. See [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Phase 1 of 7. Database, plus Bifrost and Tavily clients (real + mock), verified live. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
@@ -40,8 +40,9 @@ Full instructions, API keys, Ollama setup and troubleshooting: **[docs/setup.md]
 
 ## Documentation
 
-- [Setup & configuration](docs/setup.md)
-- [Architecture](docs/architecture.md)
+- [Setup & configuration](docs/setup.md): keys, Ollama, mock vs live mode, troubleshooting
+- [Architecture](docs/architecture.md): components, clients, data model
+- [Bifrost integration](docs/bifrost.md): gateway config, model ids, error handling, live check
 
 ## Repository layout
 
@@ -63,5 +64,7 @@ docs/        Project documentation
 | `make logs` / `make ps` / `make health` | Observe the stack |
 | `make ollama-test` | Prompt Ollama through Bifrost (`make ollama-test OLLAMA_MODEL=qwen3.5:9b` to change model) |
 | `make llm-test MODEL=<id>` / `make models` | Prompt any model through Bifrost / list reachable models |
+| `make live-check` | Test real Bifrost providers, tool calling and Tavily end to end |
+| `make db-tables` | List PostgreSQL tables |
 | `make test` / `make lint` / `make format` | Tests / lint check / auto-fix |
 | `make check` | Lint + tests. **Run before every commit.** |

@@ -28,11 +28,11 @@
 
 | Component | Responsibility | Status |
 |---|---|---|
-| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Phase 0: home page + status |
-| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Phase 0: `/health` |
-| **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Running, 3 providers configured |
-| **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer verifier. | Phase 1+ |
-| **PostgreSQL** | Persistent results, history and traces. | Running, schema in Phase 1 |
+| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home page + status |
+| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | `/health` (per-component), `/models`, DB schema, LLM + search clients |
+| **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
+| **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer verifier. | Client ready, verified live |
+| **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
 
 ## Key design decisions
 
@@ -41,14 +41,46 @@
 - **Fail soft.** Every outbound call has a timeout. A provider failure marks a single execution as `error` and never aborts a run or crashes the UI.
 - **Pinned everything.** Python dependencies are pinned exactly, and the Bifrost image is pinned by digest.
 
-### Bifrost configuration notes
+### Clients and mock mode
 
-`bifrost/config.json` is mounted read-only into the container's app dir (`/app/data`). Its runtime state lives in the `bifrost-data` volume.
+```
+backend/app/clients/
+  llm.py          LLMClient protocol, LLMResponse/ToolCall/LLMError, BifrostClient (httpx)
+  mock_llm.py     MockLLMClient: per-model profiles, tool use, recovery, answer key, responders
+  search.py       SearchClient protocol, SearchResponse/SearchResult/SearchError, TavilySearchClient
+  mock_search.py  MockSearchClient: dated demo corpus + generic fallback
+  __init__.py     get_llm_client() / get_search_client(): chosen once per process by MOCK_MODE
+```
 
-- `source_of_truth: "config.json"` — the file always wins over state persisted in the volume.
-- `client.enforce_auth_on_inference: false` — no virtual key required. This is safe only because the gateway is used on a local or Docker network. Turn it on for any shared deployment.
-- `providers.ollama.network_config.allow_private_network: true` — needed because `host.docker.internal` resolves to a private IP, which Bifrost's SSRF guard blocks by default.
+The rest of the code depends only on the `LLMClient` / `SearchClient` protocols, so mock and
+real mode run identical code paths above the client layer. FastAPI routes receive clients through
+`Depends(get_llm_client)`, which tests override. Gateway details are in [bifrost.md](bifrost.md).
 
 ## Data model
 
-Defined in Phase 1. See the plan: agents, task suites/tasks, benchmark runs, task executions, trace steps, freshness checks/claims.
+Defined in `backend/app/models.py` (SQLAlchemy 2.0). Generic column types run on PostgreSQL in
+Docker and on SQLite in tests. Tables are created at startup by `init_db()`, which retries while
+Postgres is still booting.
+
+```
+agents ─────────────┐
+                    │ agent_id
+task_suites ─< tasks│
+     │              ▼
+     └─< benchmark_runs ─< task_executions ─< trace_steps
+                               │
+                               └─< freshness_checks ─< claims
+```
+
+| Table | Purpose | Key columns |
+|---|---|---|
+| `agents` | An agent = model + prompt + tools + step budget | `name` (unique), `model` (Bifrost id), `system_prompt`, `tools` (JSON list), `temperature`, `max_steps` |
+| `task_suites` | Named benchmark suite | `name` (unique), `description` |
+| `tasks` | One benchmark question | `key`, `prompt`, `expected`, `scorer` (`exact\|contains\|numeric\|regex\|judge`), `tolerance`, `category`, `time_sensitive` |
+| `benchmark_runs` | One run of a suite × agents × repeats | `agent_ids`, `repeats`, `fault_rate`, `mock_mode`, `status`, `progress_done/total`, timestamps |
+| `task_executions` | One agent attempting one task once | `output`, `status` (`ok\|error\|max_steps`), `score`, `passed`, token counts, `cost_usd`, `latency_ms`, `steps`, `tool_calls`, `faults_injected`, `retries`, `recovered`, `freshness_score`. `run_id` is NULL for ad-hoc "try agent" runs. |
+| `trace_steps` | Ordered steps of an execution | `idx`, `type` (`llm_call\|tool_call\|tool_result\|error\|retry\|final`), `payload` (JSON), tokens, `latency_ms` |
+| `freshness_checks` | One stale-answer analysis | `input_text`, optional `execution_id`, `freshness_score` |
+| `claims` | One extracted claim | `text`, `time_sensitive`, `query`, `sources` (JSON: url, title, published_date), `verdict` (`current\|outdated\|contradicted\|unverifiable\|not_time_sensitive`), `confidence`, `explanation` |
+
+Deletes cascade from run → executions → trace steps, and from check → claims. Agents and suites are never deleted by a run.

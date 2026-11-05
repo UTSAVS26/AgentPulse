@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     search_timeout_s: float = 20.0
     health_timeout_s: float = 3.0
 
+    mock_seed: int = 42
+    """Seed for the mock LLM/search so demo runs are reproducible."""
+
+    mock_latency_scale: float = 0.25
+    """Multiplier on simulated latency (1.0 = realistic, 0 = instant). Reported latency is unscaled."""
+
 
 @lru_cache
 def get_settings() -> Settings:

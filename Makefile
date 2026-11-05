@@ -15,7 +15,7 @@ OLLAMA_MODEL ?= granite4:3b
 MODEL ?= groq/openai/gpt-oss-20b
 
 .DEFAULT_GOAL := help
-.PHONY: help setup env up up-live down reset restart build logs ps health ollama-test llm-test models \
+.PHONY: help setup env up up-live down reset restart build logs ps health ollama-test llm-test models live-check db-tables \
         test lint format check
 
 help:
@@ -38,6 +38,8 @@ help:
 	$(info     make ollama-test  Send a test prompt through Bifrost to Ollama (OLLAMA_MODEL=$(OLLAMA_MODEL)))
 	$(info     make llm-test     Send a test prompt to any model, e.g. make llm-test MODEL=groq/openai/gpt-oss-20b)
 	$(info     make models       List every model reachable through Bifrost)
+	$(info     make live-check   Test REAL Bifrost providers + tool calling + Tavily (ignores MOCK_MODE))
+	$(info     make db-tables    List database tables in PostgreSQL)
 	$(info )
 	$(info   Quality)
 	$(info     make test         Run backend tests)
@@ -96,6 +98,12 @@ llm-test:
 
 models:
 	curl -s -w "\n" -m 60 http://localhost:8080/v1/models
+
+live-check:
+	$(COMPOSE) exec backend python -m app.scripts.live_check
+
+db-tables:
+	$(COMPOSE) exec postgres psql -U agentpulse -d agentpulse -c "\dt"
 
 # ---------------------------------------------------------------- quality
 test:
