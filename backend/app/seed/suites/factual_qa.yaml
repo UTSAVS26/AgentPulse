@@ -1,0 +1,47 @@
+name: Factual QA
+description: >-
+  Stable general-knowledge questions. Tests baseline knowledge and answer formatting.
+  Tools should not be necessary, but agents may use web_search.
+tasks:
+  - key: capital-australia
+    prompt: What is the capital city of Australia?
+    expected: Canberra
+    scorer: contains
+    category: geography
+  - key: gold-symbol
+    prompt: What is the chemical symbol for gold?
+    expected: Au
+    scorer: contains
+    category: science
+  - key: author-1984
+    prompt: Who wrote the novel "Nineteen Eighty-Four"?
+    expected: Orwell
+    scorer: contains
+    category: literature
+  - key: largest-planet
+    prompt: What is the largest planet in our Solar System?
+    expected: Jupiter
+    scorer: contains
+    category: science
+  - key: water-boiling-c
+    prompt: At sea level, at what temperature in degrees Celsius does water boil?
+    expected: "100"
+    scorer: numeric
+    category: science
+  - key: continents
+    prompt: How many continents are there on Earth by the most common convention?
+    expected: "7"
+    scorer: numeric
+    category: geography
+  - key: ww2-end
+    prompt: In which year did World War II end?
+    expected: "1945"
+    scorer: numeric
+    category: history
+  - key: sky-blue
+    prompt: In one sentence, why is the sky blue?
+    expected: >-
+      Sunlight is scattered by air molecules (Rayleigh scattering), and shorter blue wavelengths
+      scatter much more than longer red wavelengths.
+    scorer: judge
+    category: science

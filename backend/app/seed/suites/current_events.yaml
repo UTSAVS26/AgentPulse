@@ -1,0 +1,47 @@
+name: Current Events (time-sensitive)
+description: >-
+  Facts that change over time. Models answering from training data tend to give stale answers;
+  agents with live web search should get them right. Expected answers were verified with Tavily
+  on 2026-11-05. Update this file when the facts change (that is the point of stale-answer
+  detection). `stale_answer` is what an out-of-date model typically says.
+tasks:
+  - key: uk-prime-minister
+    prompt: Who is the current Prime Minister of the United Kingdom?
+    expected: Burnham
+    stale_answer: Keir Starmer
+    scorer: contains
+    category: politics
+    time_sensitive: true
+  - key: world-cup-winner
+    prompt: Which country won the most recent FIFA World Cup?
+    expected: Spain
+    stale_answer: Argentina
+    scorer: contains
+    category: sports
+    time_sensitive: true
+  - key: latest-python
+    prompt: What is the latest stable minor version of Python (for example 3.x)?
+    expected: "3.15"
+    stale_answer: Python 3.13
+    scorer: contains
+    category: technology
+    time_sensitive: true
+  - key: current-year
+    prompt: What year is it right now?
+    expected: "{{current_year}}"
+    stale_answer: "2024"
+    scorer: contains
+    category: date
+    time_sensitive: true
+  - key: day-of-week
+    prompt: What day of the week is it today?
+    expected: "{{today_weekday}}"
+    scorer: contains
+    category: date
+    time_sensitive: true
+  - key: un-secretary-general
+    prompt: Who is the current Secretary-General of the United Nations?
+    expected: Guterres
+    scorer: contains
+    category: politics
+    time_sensitive: true

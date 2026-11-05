@@ -2,6 +2,22 @@
 
 All notable changes per build phase.
 
+## [Phase 3] Benchmark engine, scoring & metrics
+
+### Added
+- 3 seeded task suites (22 tasks): Factual QA, Math & Reasoning, Current Events (time-sensitive). Current answers were verified with Tavily, with `stale_answer` hints.
+- Scorers: `contains` (with alternatives), `exact`, `numeric` (tolerance, thousands separators, final-sentence matching), `regex`, `judge` (LLM via Bifrost, falls back to `contains`). Date placeholders are supported in expected answers.
+- Benchmark engine: background runs, agents in parallel and tasks sequential per agent, a commit per execution, live progress, cancel, crash isolation, and interrupted-run recovery on startup.
+- Cost from **Bifrost's model catalogue pricing** (cached), with a dated snapshot fallback. Local Ollama costs $0.
+- Metrics: accuracy, consistency, pass@k, pass-all-k, error rate, recovery rate, latency p50/p95, tokens, cost, cost per correct answer, accuracy by category, task × agent matrix, and the composite **reliability score** (documented weights, renormalised when components are undefined).
+- APIs: `/suites` (CRUD), `/runs` (start, list, status, executions, metrics, cancel, delete).
+- Dashboard: **Run Benchmark** page (configure, live progress via `st.fragment`, partial leaderboard, cancel, executions table).
+- Runtime: rate-limit-aware retries (429 → 2 s…30 s backoff, 5 retries) and **corrective retry for provider-rejected tool calls** (found in live Groq runs).
+- Mock LLM: "stale knowledge" for time-sensitive tasks without search.
+- Auto-migration: new nullable columns are added to existing databases on startup.
+- Tests: 54 new backend tests (145 total) and 2 new UI tests (7 total).
+- Docs: `docs/benchmarks.md`, `docs/metrics.md`, plus the suites and runs sections in `docs/api.md`.
+
 ## [Phase 2] Agent runtime, tools & tracing
 
 ### Added

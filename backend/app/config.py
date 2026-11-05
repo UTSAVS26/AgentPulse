@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     search_timeout_s: float = 20.0
     health_timeout_s: float = 3.0
 
+    judge_model: str = "groq/openai/gpt-oss-120b"
+    """Model used by the `judge` scorer (live mode only)."""
+
     seed_on_startup: bool = True
     """Insert the default demo agents on startup (existing agents are never modified)."""
 

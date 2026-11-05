@@ -118,3 +118,62 @@ def _describe(kind: str, p: dict[str, Any]):
     if kind == "final":
         return "Final answer", lambda: st.markdown(p.get("content") or "_(empty)_")
     return kind, None
+
+
+# ------------------------------------------------------------------------------------ formatting
+def pct(v: float | None) -> str:
+    return "–" if v is None else f"{v * 100:.0f}%"
+
+
+def secs(ms: float | None) -> str:
+    return "–" if ms is None else f"{ms / 1000:.2f} s"
+
+
+def usd(v: float | None) -> str:
+    if v is None:
+        return "–"
+    if v == 0:
+        return "$0"
+    return f"${v:.4f}" if v >= 0.0001 else f"${v:.6f}"
+
+
+RUN_STATUS = {
+    "pending": "⏳ pending",
+    "running": "🏃 running",
+    "done": "✅ done",
+    "cancelled": "🛑 cancelled",
+    "failed": "❌ failed",
+}
+
+
+def run_label(r: dict) -> str:
+    mode = "mock" if r["mock_mode"] else "live"
+    return (
+        f"#{r['id']} · {r['suite_name']} · {len(r['agent_ids'])} agents × {r['repeats']} · "
+        f"faults {r['fault_rate']:.0%} · {mode} · {RUN_STATUS.get(r['status'], r['status'])}"
+    )
+
+
+def leaderboard_frame(board: list[dict]):
+    import pandas as pd
+
+    return pd.DataFrame(
+        [
+            {
+                "Rank": r["rank"],
+                "Agent": r["agent_name"],
+                "Model": r["model"],
+                "Reliability": pct(r["reliability_score"]),
+                "Accuracy": pct(r["accuracy"]),
+                "Consistency": pct(r["consistency"]),
+                "Recovery": pct(r["recovery_rate"]),
+                "Error rate": pct(r["error_rate"]),
+                "p50 latency": secs(r["latency_ms_p50"]),
+                "p95 latency": secs(r["latency_ms_p95"]),
+                "Avg tokens": "–" if r["tokens_mean"] is None else f"{r['tokens_mean']:,.0f}",
+                "Total cost": usd(r["cost_usd_total"]),
+                "Done": r["executions"],
+            }
+            for r in board
+        ]
+    )

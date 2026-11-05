@@ -24,6 +24,7 @@ cp .env.example .env
 | `TAVILY_API_KEY` | – | Live web search and claim verification. Get one at https://tavily.com |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `agentpulse` | Database credentials |
 | `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `120` / `20` | Outbound request timeouts |
+| `JUDGE_MODEL` | `groq/openai/gpt-oss-120b` | Model used by the `judge` scorer (live mode) |
 
 Provider keys are read **only by Bifrost** (see `bifrost/config.json`, which uses `env.` references). The backend never sees them.
 

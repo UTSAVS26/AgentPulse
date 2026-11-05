@@ -60,6 +60,9 @@ class Task(Base):
     tolerance: Mapped[float] = mapped_column(Float, default=0.0)
     category: Mapped[str] = mapped_column(String(60), default="general")
     time_sensitive: Mapped[bool] = mapped_column(Boolean, default=False)
+    stale_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """What an out-of-date model typically answers (e.g. a previous office holder). Used by the
+    mock LLM to simulate stale knowledge, and as a hint for stale-answer detection."""
 
     suite: Mapped[TaskSuite] = relationship(back_populates="tasks")
 
@@ -101,6 +104,7 @@ class TaskExecution(Base):
     status: Mapped[str] = mapped_column(String(20), default="ok")  # ok|error|max_steps
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    score_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
@@ -109,6 +113,7 @@ class TaskExecution(Base):
     tool_calls: Mapped[int] = mapped_column(Integer, default=0)
     faults_injected: Mapped[int] = mapped_column(Integer, default=0)
     retries: Mapped[int] = mapped_column(Integer, default=0)
+    tool_errors: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
     recovered: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     freshness_score: Mapped[float | None] = mapped_column(Float, nullable=True)

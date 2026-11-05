@@ -112,14 +112,18 @@ class MockLLMClient:
         self.seed = seed
         self.latency_scale = latency_scale
         self.answer_key = {_normalize(k): v for k, v in (answer_key or {}).items()}
+        self.stale_key: dict[str, str] = {}
         self.responders: list[Responder] = list(responders or [])
         self.failure_rate_override = failure_rate_override
         self._calls: dict[str, int] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ configuration
-    def set_answer_key(self, answer_key: dict[str, str]) -> None:
+    def set_answer_key(self, answer_key: dict[str, str], stale_key: dict[str, str] | None = None) -> None:
+        """Register correct answers (and, for time-sensitive prompts, the outdated answer a model
+        with old training data would give)."""
         self.answer_key.update({_normalize(k): v for k, v in answer_key.items()})
+        self.stale_key.update({_normalize(k): v for k, v in (stale_key or {}).items()})
 
     def add_responder(self, responder: Responder) -> None:
         self.responders.append(responder)
@@ -234,6 +238,10 @@ class MockLLMClient:
             None,
         )
         expected = self._lookup_answer(user_prompt)
+        stale = self.stale_key.get(_normalize(user_prompt))
+        if stale and not good_tool_result and rng.random() < 0.85:
+            # Time-sensitive question answered from (simulated) training data: confidently outdated.
+            return f"The answer is {stale}.", []
         if expected is not None:
             accuracy = min(0.99, profile.accuracy + (0.08 if good_tool_result else 0.0))
             answer = expected if rng.random() < accuracy else _perturb(expected, rng)

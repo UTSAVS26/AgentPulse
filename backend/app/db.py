@@ -7,7 +7,7 @@ import time
 from collections.abc import Iterator
 from functools import lru_cache
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -51,12 +51,38 @@ def init_db(engine: Engine | None = None, attempts: int = 10, delay_s: float = 1
     for attempt in range(1, attempts + 1):
         try:
             Base.metadata.create_all(engine)
+            add_missing_columns(engine)
             return
         except Exception as exc:  # pragma: no cover - only hit when the DB is down
             if attempt == attempts:
                 raise
             log.warning("Database not ready (attempt %d/%d): %s", attempt, attempts, exc)
             time.sleep(delay_s)
+
+
+def add_missing_columns(engine: Engine) -> list[str]:
+    """Lightweight forward-only migration: add nullable columns that exist in the models but not
+    in the database (``create_all`` never alters existing tables). Returns the columns added.
+
+    Good enough for this project's additive schema changes; anything more complex would need Alembic.
+    """
+    added: list[str] = []
+    insp = inspect(engine)
+    existing_tables = set(insp.get_table_names())
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue
+            present = {c["name"] for c in insp.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in present or not column.nullable:
+                    continue
+                col_type = column.type.compile(dialect=engine.dialect)
+                conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {col_type}'))
+                added.append(f"{table.name}.{column.name}")
+    if added:
+        log.info("Added missing columns: %s", ", ".join(added))
+    return added
 
 
 def ping_db(engine: Engine | None = None) -> tuple[bool, str]:

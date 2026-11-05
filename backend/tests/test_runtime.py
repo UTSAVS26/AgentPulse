@@ -216,3 +216,25 @@ def test_save_execution_persists_metrics_and_ordered_trace(db_engine, search):
         assert loaded.prompt_tokens == 30 and loaded.completion_tokens == 12
         assert [t.idx for t in loaded.trace] == list(range(len(r.steps)))
         assert loaded.run_id is None
+
+
+def test_invalid_tool_call_rejected_by_provider_gets_corrective_retry(search):
+    err = LLMError(
+        "tool call validation failed: parameters for tool calculator did not match schema",
+        retryable=True,
+        status_code=400,
+        kind="invalid_tool_call",
+    )
+    llm = ScriptedLLM([err, final("The answer is 4.")])
+    r = run_agent(spec(), "2+2?", llm, search, RuntimeConfig(sleep_scale=0))
+    assert r.status == "ok" and r.retries == 1 and r.tool_errors == 1 and r.recovered
+    notice = llm.calls[1][-1]
+    assert notice["role"] == "user" and "rejected" in notice["content"]
+    assert [s.type for s in r.steps][:2] == ["error", "retry"]
+
+
+def test_invalid_tool_call_gives_up_after_max_retries(search):
+    err = LLMError("tool call validation failed", retryable=True, status_code=400, kind="invalid_tool_call")
+    llm = ScriptedLLM([err])
+    r = run_agent(spec(), "2+2?", llm, search, RuntimeConfig(max_retries=2, sleep_scale=0))
+    assert r.status == "error" and r.retries == 2

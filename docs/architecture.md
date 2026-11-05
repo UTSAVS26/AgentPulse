@@ -28,8 +28,8 @@
 
 | Component | Responsibility | Status |
 |---|---|---|
-| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home + Agents pages (`ui.py` shared helpers) |
-| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents CRUD, agent runtime (tools, retries, fault injection, traces), `/health`, `/models` |
+| **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark pages (`ui.py` shared helpers) |
+| **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs APIs; agent runtime; benchmark engine (scoring, pricing, metrics) |
 | **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
 | **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer verifier. | Client ready, verified live |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |
@@ -82,5 +82,7 @@ task_suites ─< tasks│
 | `trace_steps` | Ordered steps of an execution | `idx`, `type` (`llm_call\|tool_call\|tool_result\|error\|retry\|final`), `payload` (JSON), tokens, `latency_ms` |
 | `freshness_checks` | One stale-answer analysis | `input_text`, optional `execution_id`, `freshness_score` |
 | `claims` | One extracted claim | `text`, `time_sensitive`, `query`, `sources` (JSON: url, title, published_date), `verdict` (`current\|outdated\|contradicted\|unverifiable\|not_time_sensitive`), `confidence`, `explanation` |
+
+Schema changes are additive. `add_missing_columns()` adds new nullable columns to existing databases on startup, so upgrading never requires wiping data.
 
 Deletes cascade from run → executions → trace steps, and from check → claims. Agents and suites are never deleted by a run.

@@ -95,3 +95,62 @@ def test_pages_degrade_gracefully_when_backend_is_down(monkeypatch):
         assert not at.exception, [e.value for e in at.exception]
         errors = [e.value for e in [*at.error, *at.sidebar.error]]
         assert any("Cannot reach the backend" in e for e in errors), errors
+
+
+def _wait_for_run(run_id: int, timeout_s: float = 240) -> dict:
+    import time
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        run = requests.get(f"{BACKEND}/runs/{run_id}", timeout=10).json()
+        if run["status"] not in ("pending", "running"):
+            return run
+        time.sleep(1)
+    raise AssertionError(f"run {run_id} did not finish in {timeout_s}s")
+
+
+def test_run_benchmark_page_starts_run_and_shows_leaderboard():
+    at = app("pages/2_Run_Benchmark.py")
+    assert any(s.label == "Task suite" for s in at.selectbox)
+    agents_select = next(m for m in at.multiselect if m.label == "Agents")
+    agents_select.set_value(agents_select.options[:2])
+    next(s for s in at.slider if s.label == "Repeats").set_value(2)
+    at.run()
+    next(b for b in at.button if b.label == "Start benchmark").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+
+    run_id = at.session_state["run_id"]
+    # Simulate someone starting another run from a browser while this test waits.
+    started = requests.get(f"{BACKEND}/runs/{run_id}", timeout=10).json()
+    other = requests.post(
+        f"{BACKEND}/runs",
+        json={"suite_id": started["suite_id"], "agent_ids": started["agent_ids"][:1], "repeats": 1},
+        timeout=10,
+    ).json()["id"]
+    assert other > run_id
+    run = _wait_for_run(run_id)
+    assert run["status"] == "done", run
+    assert len(run["agent_ids"]) == 2 and run["repeats"] == 2
+    _wait_for_run(other)
+
+    # Re-render with THIS run selected. (The page defaults to the newest run; other runs may be
+    # started concurrently, e.g. from a browser, so the test must not rely on "newest".)
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Run_Benchmark.py"), default_timeout=TIMEOUT)
+    at.session_state["run_id"] = run_id
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.session_state["run_id"] == run_id
+    board = next(d.value for d in at.dataframe if "Reliability" in d.value.columns)
+    assert {"Rank", "Agent", "Reliability", "Accuracy", "Consistency"} <= set(board.columns)
+    assert len(board) == 2
+    assert any("Leaderboard" in m.value for m in at.markdown)
+
+
+def test_run_benchmark_page_degrades_when_backend_down(monkeypatch):
+    import api
+
+    monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Run_Benchmark.py"), default_timeout=TIMEOUT)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Cannot reach the backend" in e.value for e in at.error)

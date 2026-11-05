@@ -68,6 +68,55 @@ Example `/try` response (abridged, shape of a live run of "GPT-OSS 20B · tools"
 Trace step types: `llm_call`, `tool_call`, `tool_result` (with `fault` when injected), `error`, `retry`, `final`.
 See [agents.md](agents.md) for the runtime semantics.
 
+## Suites
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/suites` | List suites (task count, categories, number of time-sensitive tasks) |
+| GET | `/suites/{id}` | Suite with all its tasks |
+| POST | `/suites` | Create a custom suite → `201` (`409` duplicate name, `422` invalid scorer or duplicate task keys) |
+| DELETE | `/suites/{id}` | Delete → `204` (`409` if any run uses it) |
+
+```bash
+curl -s localhost:8000/suites -H 'content-type: application/json' -d '{
+  "name": "My checks",
+  "tasks": [
+    {"key": "sq", "prompt": "What is 12 squared?", "expected": "144", "scorer": "numeric"},
+    {"key": "pm", "prompt": "Who is the UK Prime Minister?", "expected": "Burnham", "time_sensitive": true}
+  ]
+}'
+```
+
+## Runs
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/runs` | Start a run → `202` with the run (`422` on invalid suite/agents or > 2000 executions) |
+| GET | `/runs?limit=50` | Runs, newest first |
+| GET | `/runs/{id}` | Status (`pending`, `running`, `done`, `cancelled`, `failed`), `progress_done/total`, duration |
+| GET | `/runs/{id}/metrics` | Leaderboard plus per-agent metrics and the task × agent matrix (partial while running). See [metrics.md](metrics.md). |
+| GET | `/runs/{id}/executions` | Every execution (answer, pass/fail, `score_detail`, tokens, cost, faults…) without traces |
+| POST | `/runs/{id}/cancel` | Cancel a pending or running run (finished executions are kept) |
+| DELETE | `/runs/{id}` | Delete a finished run and its executions (`409` while running) |
+
+```bash
+# 3 agents × 8 tasks × 3 repeats with 20% tool faults
+curl -s localhost:8000/runs -H 'content-type: application/json' \
+  -d '{"suite_id": 3, "agent_ids": [1, 2, 4], "repeats": 3, "fault_rate": 0.2}'
+curl -s localhost:8000/runs/1            # poll progress
+curl -s localhost:8000/runs/1/metrics    # leaderboard
+```
+
+Illustrative `/runs/{id}/metrics` leaderboard row (abridged):
+
+```json
+{"rank": 1, "agent_name": "GPT-OSS 120B · tools", "model": "groq/openai/gpt-oss-120b",
+ "executions": 6, "passed": 5, "accuracy": 0.83, "consistency": null, "recovery_rate": null,
+ "error_rate": 0.0, "latency_ms_p50": 4100, "latency_ms_p95": 9800, "tokens_total": 24044,
+ "cost_usd_total": 0.00449, "reliability_score": 0.91,
+ "reliability_weights": {"accuracy": 0.727, "stability": 0.273}}
+```
+
 ## Coming in later phases
 
-Benchmark suites and runs (Phase 3), stale-answer detection (Phase 5), reports (Phase 6).
+Stale-answer detection (Phase 5) and reports (Phase 6).

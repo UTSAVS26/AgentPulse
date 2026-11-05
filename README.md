@@ -15,7 +15,7 @@ still true today, extracting time-sensitive claims and verifying them against li
 | Scoring, reliability & freshness analytics | AgentPulse evaluation engine |
 | API / UI / storage | FastAPI · Streamlit · PostgreSQL |
 
-> **Status:** Phase 2 of 7. Agents with tools, fault injection and execution traces, plus the Agents dashboard page. See [CHANGELOG.md](CHANGELOG.md).
+> **Status:** Phase 3 of 7. Benchmark engine with scoring, repeated runs, cost from Bifrost pricing, reliability metrics and the Run Benchmark page. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
@@ -44,6 +44,8 @@ Full instructions, API keys, Ollama setup and troubleshooting: **[docs/setup.md]
 - [Architecture](docs/architecture.md): components, clients, data model
 - [Bifrost integration](docs/bifrost.md): gateway config, model ids, error handling, live check
 - [Agents](docs/agents.md): agent definition, default agents, tools, runtime loop, fault injection
+- [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
+- [Metrics](docs/metrics.md): every formula and the reliability score
 - [API reference](docs/api.md): endpoints with curl examples (full spec at http://localhost:8000/docs)
 
 ## Repository layout

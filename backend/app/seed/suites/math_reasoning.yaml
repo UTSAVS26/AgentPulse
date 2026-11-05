@@ -1,0 +1,50 @@
+name: Math & Reasoning
+description: >-
+  Arithmetic and word problems where exact numbers matter. Agents with a calculator tool
+  should outperform those without; fault injection on the calculator tests recovery.
+tasks:
+  - key: arith-basic
+    prompt: What is 17 * 23 + 4?
+    expected: "395"
+    scorer: numeric
+    category: arithmetic
+  - key: arith-large
+    prompt: What is 1234 multiplied by 5678?
+    expected: "7006652"
+    scorer: numeric
+    category: arithmetic
+  - key: percent
+    prompt: What is 15% of 2,340?
+    expected: "351"
+    scorer: numeric
+    category: arithmetic
+  - key: power-of-two
+    prompt: What is 2 to the power of 20?
+    expected: "1048576"
+    scorer: numeric
+    category: arithmetic
+  - key: compound-interest
+    prompt: >-
+      $1,000 is invested at 5% annual interest, compounded yearly. How much is it worth after
+      10 years? Give the amount in dollars rounded to the nearest cent.
+    expected: "1628.89"
+    scorer: numeric
+    tolerance: 0.01
+    category: word-problem
+  - key: train-speed
+    prompt: A train travels 180 km in 2.5 hours. What is its average speed in km/h?
+    expected: "72"
+    scorer: numeric
+    category: word-problem
+  - key: discount
+    prompt: >-
+      A shirt costs $40 after a 20% discount. What was its original price in dollars?
+    expected: "50"
+    scorer: numeric
+    category: word-problem
+  - key: days-count
+    prompt: >-
+      How many days are there in total in three non-leap years plus two leap years?
+    expected: "1827"
+    scorer: numeric
+    category: word-problem

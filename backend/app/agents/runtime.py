@@ -109,6 +109,10 @@ class RuntimeConfig:
     fault_rate: float = 0.0
     max_retries: int = 2
     backoff_base_ms: float = 500.0
+    max_rate_limit_retries: int = 5
+    """Rate limits (HTTP 429) get more, longer retries: free tiers enforce per-minute windows."""
+    rate_limit_backoff_ms: float = 2000.0
+    max_backoff_ms: float = 30_000.0
     sleep_scale: float = 1.0
     """Multiplier on real backoff sleeps (0 in tests, the mock latency scale in mock mode)."""
     max_tokens: int | None = 1024
@@ -260,12 +264,29 @@ def _call_llm_with_retries(
                     },
                 )
             )
-            if not exc.retryable or attempt >= cfg.max_retries:
+            if exc.kind == "invalid_tool_call" and attempt < cfg.max_retries:
+                # No backoff needed: tell the model what was wrong and let it try again.
+                attempt += 1
+                result.retries += 1
+                result.tool_errors += 1
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[system notice] Your previous tool call was rejected: {exc.message} "
+                        "Call the tool again with arguments that match its schema, or answer directly.",
+                    }
+                )
+                add(StepRecord(type="retry", payload={"attempt": attempt + 1, "reason": "invalid_tool_call"}))
+                continue
+            rate_limited = exc.kind == "rate_limited"
+            limit = cfg.max_rate_limit_retries if rate_limited else cfg.max_retries
+            if not exc.retryable or attempt >= limit:
                 result.status = "error"
                 result.error = str(exc)
                 result.output = ""
                 return None
-            backoff_ms = cfg.backoff_base_ms * (2**attempt)
+            base = cfg.rate_limit_backoff_ms if rate_limited else cfg.backoff_base_ms
+            backoff_ms = min(base * (2**attempt), cfg.max_backoff_ms)
             attempt += 1
             result.retries += 1
             add(
@@ -339,6 +360,7 @@ def save_execution(
         tool_calls=result.tool_calls,
         faults_injected=result.faults_injected,
         retries=result.retries,
+        tool_errors=result.tool_errors,
         recovered=result.recovered,
         error=result.error,
         trace=[

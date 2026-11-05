@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.agents.tools import TOOLS
+from app.bench.scoring import SCORERS
 
 
 # ------------------------------------------------------------------------------------ agents
@@ -102,7 +103,9 @@ class ExecutionOut(BaseModel):
     tool_calls: int
     faults_injected: int
     retries: int
+    tool_errors: int | None = 0
     recovered: bool
+    score_detail: str | None = None
     error: str | None
     freshness_score: float | None
     created_at: datetime
@@ -112,3 +115,93 @@ class ExecutionDetailOut(ExecutionOut):
     agent_name: str
     model: str
     trace: list[TraceStepOut]
+
+
+# ------------------------------------------------------------------------------------ suites
+class TaskIn(BaseModel):
+    key: str = Field(min_length=1, max_length=120, pattern=r"^[a-z0-9][a-z0-9_-]*$", examples=["arith-basic"])
+    prompt: str = Field(min_length=1, max_length=8000)
+    expected: str = Field(default="", max_length=4000, description="Use `|` for alternatives (contains).")
+    scorer: str = Field(default="contains", description=f"One of {', '.join(SCORERS)}.")
+    tolerance: float = Field(default=0.0, ge=0.0)
+    category: str = Field(default="general", max_length=60)
+    time_sensitive: bool = False
+    stale_answer: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("scorer")
+    @classmethod
+    def _known_scorer(cls, v: str) -> str:
+        if v not in SCORERS:
+            raise ValueError(f"unknown scorer '{v}'; available: {list(SCORERS)}")
+        return v
+
+
+class TaskOut(TaskIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+
+
+class SuiteCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=4000)
+    tasks: list[TaskIn] = Field(min_length=1)
+
+    @field_validator("tasks")
+    @classmethod
+    def _unique_keys(cls, v: list[TaskIn]) -> list[TaskIn]:
+        keys = [t.key for t in v]
+        dupes = sorted({k for k in keys if keys.count(k) > 1})
+        if dupes:
+            raise ValueError(f"duplicate task keys: {dupes}")
+        return v
+
+
+class SuiteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str
+    task_count: int
+    categories: list[str]
+    time_sensitive_count: int
+
+
+class SuiteDetailOut(SuiteOut):
+    tasks: list[TaskOut]
+
+
+# ------------------------------------------------------------------------------------ runs
+class RunCreate(BaseModel):
+    suite_id: int
+    agent_ids: list[int] = Field(min_length=1)
+    repeats: int = Field(default=1, ge=1, le=10, description="Times each agent attempts each task.")
+    fault_rate: float = Field(default=0.0, ge=0.0, le=1.0, description="Per-tool-call fault probability.")
+
+
+class RunOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    suite_id: int
+    suite_name: str
+    agent_ids: list[int]
+    agent_names: list[str]
+    repeats: int
+    fault_rate: float
+    mock_mode: bool
+    status: str
+    progress_done: int
+    progress_total: int
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    duration_s: float | None
+
+
+class RunExecutionOut(ExecutionOut):
+    agent_name: str
+    task_key: str
+    category: str

@@ -77,6 +77,15 @@ Every model call, tool call, tool result, error and retry is recorded as a **tra
 
 Faults are drawn from a seeded RNG, so passing the same `seed` reproduces the same faults.
 
+### Provider-side failures
+
+| Failure | Handling |
+|---|---|
+| Timeout / 5xx | Retried up to 2× with exponential backoff (0.5 s, 1 s) |
+| Rate limit (429) | Retried up to 5× with longer backoff (2 s → 30 s cap), because free tiers enforce per-minute token windows |
+| Malformed tool call rejected by the provider (HTTP 400 "tool call validation failed") | The model is told what was wrong and retries (up to 2×, no backoff). Counted as a tool error. |
+| Other 4xx (bad model id, invalid request) | Not retried; the execution ends with `status=error` |
+
 ### Execution metrics
 
 | Field | Meaning |
@@ -86,7 +95,8 @@ Faults are drawn from a seeded RNG, so passing the same `seed` reproduces the sa
 | `tool_calls` | Number of tool calls requested |
 | `faults_injected` | Faults injected into this execution |
 | `retries` | LLM call retries after transient errors |
-| `recovered` | A failure happened (fault, tool error or LLM retry), yet the agent still produced an answer. Phase 3 tightens this to "…and the answer was correct". |
+| `recovered` | A failure happened (fault, tool error, rejected tool call or LLM retry). For ad-hoc `/try` runs, the agent still produced an answer. In benchmark runs, the answer was also scored **correct**. |
+| `tool_errors` | Tool calls that returned an error (including injected error faults and provider-rejected calls) |
 | `prompt_tokens` / `completion_tokens` | Sum over all model calls (as reported by the provider via Bifrost) |
 | `latency_ms` | Sum of model latencies, tool latencies, simulated fault latency and retry backoff |
 

@@ -183,3 +183,11 @@ def test_mock_responders_take_priority():
 def test_unknown_models_get_stable_profiles():
     assert profile_for("someprovider/new-model") == profile_for("someprovider/new-model")
     assert 0.55 <= profile_for("someprovider/new-model").accuracy <= 0.9
+
+
+def test_bifrost_400_tool_validation_is_classified_as_invalid_tool_call():
+    msg = "tool call validation failed: parameters for tool calculator did not match schema"
+    client = _bifrost(lambda _: httpx.Response(400, json={"error": {"message": msg}}))
+    with pytest.raises(LLMError) as exc:
+        client.chat(MODEL, [{"role": "user", "content": "x"}])
+    assert exc.value.kind == "invalid_tool_call" and exc.value.retryable

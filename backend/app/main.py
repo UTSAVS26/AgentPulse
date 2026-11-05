@@ -10,11 +10,14 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app import __version__
+from app.bench.engine import mark_interrupted_runs
 from app.clients import LLMClient, LLMError, SearchClient, get_llm_client, get_search_client
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker, init_db, ping_db
 from app.routers import agents as agents_router
-from app.seed import seed_agents
+from app.routers import runs as runs_router
+from app.routers import suites as suites_router
+from app.seed import seed_agents, seed_suites
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -22,9 +25,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
-    if get_settings().seed_on_startup:
-        with get_sessionmaker()() as db:
+    with get_sessionmaker()() as db:
+        mark_interrupted_runs(db)
+        if get_settings().seed_on_startup:
             seed_agents(db)
+            seed_suites(db)
     yield
 
 
@@ -40,6 +45,8 @@ app = FastAPI(
 
 
 app.include_router(agents_router.router)
+app.include_router(suites_router.router)
+app.include_router(runs_router.router)
 
 
 class ComponentStatus(BaseModel):

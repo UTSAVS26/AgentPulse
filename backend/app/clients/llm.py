@@ -108,6 +108,14 @@ def _extract_error_message(body: Any, fallback: str) -> str:
     return fallback[:500]
 
 
+_INVALID_TOOL_CALL_MARKERS = ("tool call validation failed", "tool_use_failed", "failed to call a function")
+
+
+def _is_invalid_tool_call(message: str) -> bool:
+    lower = message.lower()
+    return any(m in lower for m in _INVALID_TOOL_CALL_MARKERS)
+
+
 def parse_completion(body: dict[str, Any], requested_model: str, latency_ms: float) -> LLMResponse:
     """Convert an OpenAI-style chat completion body into an :class:`LLMResponse`."""
     choices = body.get("choices") or []
@@ -188,6 +196,10 @@ class BifrostClient:
             message = _extract_error_message(body, res.text or res.reason_phrase)
             retryable = res.status_code == 429 or res.status_code >= 500
             kind = "rate_limited" if res.status_code == 429 else "provider_error"
+            if res.status_code == 400 and _is_invalid_tool_call(message):
+                # The *model* produced a tool call that the provider rejected against the schema.
+                # The agent runtime gives the model a chance to correct it.
+                retryable, kind = True, "invalid_tool_call"
             raise LLMError(message, retryable=retryable, status_code=res.status_code, kind=kind)
         if not isinstance(body, dict):
             raise LLMError("non-JSON response from Bifrost", retryable=True, kind="bad_response")
