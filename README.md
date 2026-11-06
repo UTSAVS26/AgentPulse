@@ -133,6 +133,7 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 
 ## Documentation
 
+- [Pitch deck (PDF)](docs/AgentPulse-pitch-deck.pdf): 18 slides: the problem, how it works, and exactly how Bifrost and Tavily are used
 - [Demo script](docs/DEMO_SCRIPT.md): a 4–5 minute click path, pre-flight checklist and fallback plan
 - [Setup & configuration](docs/setup.md): keys, Ollama, mock vs live mode, demo data, troubleshooting
 - [Architecture](docs/architecture.md): components, clients, detector modules, data model
