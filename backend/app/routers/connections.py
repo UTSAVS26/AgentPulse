@@ -321,10 +321,11 @@ def test_connection(
     if connection_routes.wants_bifrost(conn):
         connection_routes.apply(db, conn, settings)  # (re)register: Bifrost may have restarted
     if conn.route == "bifrost":
-        from app.clients import get_bifrost
-
         slug = conn.slug
-        via = BifrostRoute(get_bifrost(), conn.provider, heal=lambda: connection_routes.reregister(slug))
+        from app.clients import get_test_bifrost
+
+        gateway = get_test_bifrost(TEST_TIMEOUT_S)  # test budget, not the 120 s LLM one
+        via = BifrostRoute(gateway, conn.provider, heal=lambda: connection_routes.reregister(slug))
         result = {
             **probe(via, model),
             "base_url": f"bifrost → {conn.provider}",

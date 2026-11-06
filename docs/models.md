@@ -119,6 +119,25 @@ input and output tokens on the connection: benchmark costs then use them, with t
 - Clients are cached per connection and rebuilt when the connection's `updated_at` changes. The URL policy is
   re-checked on every rebuild.
 
+## Validated live (2026-11-06): a real Gemini key through Bifrost
+
+With a real key, a Gemini connection was registered in Bifrost at runtime ("key accepted by Bifrost"):
+
+- Bifrost listed the **61 models** the key can use.
+- `gemini-flash-lite-latest` answered "pong" in 2.5 s **through Bifrost**, and tool calling worked
+  (`calculator(17 * 23)`).
+
+Found and fixed during that test:
+
+- **Google lists models as `models/<name>`, but Bifrost expects bare names** (`models/…` → 404). The prefix is
+  now stripped on the Bifrost route.
+- **A saved connection's test used the 120 s run timeout** instead of the test's 45 s: a slow model kept the
+  button busy for 2 minutes. It now gives up at 45 s.
+
+Retired or overloaded models return the provider's own error (404 "no longer available", 503 "high demand").
+**🔍 Fetch models** lists what your key can use, and the Models page points you to it when a model name is
+rejected.
+
 ## Validated live (2026-11-06): routing through Bifrost
 
 Against the real Bifrost (pinned image):

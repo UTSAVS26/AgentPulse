@@ -25,6 +25,8 @@ LEADERBOARD_COLUMNS = [
     ("rank", "Rank"),
     ("agent_name", "Agent"),
     ("model", "Model"),
+    ("route", "Route"),
+    ("connection", "Connection"),
     ("reliability_score", "Reliability"),
     ("accuracy", "Accuracy"),
     ("consistency", "Consistency"),
@@ -168,6 +170,14 @@ def _freshness(db: Session, board: list[dict], executions: list[dict]) -> dict[s
 
 
 # ------------------------------------------------------------------------------------ formatting
+def route_label(route: str | None, connection: str | None = None) -> str:
+    """How an agent's model is called: through the Bifrost gateway or directly (never shows keys)."""
+    if route is None:
+        return "–"
+    where = "Bifrost" if route == "bifrost" else "direct"
+    return f"{where} · {connection}" if connection else where
+
+
 def _pct(v: float | None) -> str:
     return "–" if v is None else f"{v * 100:.0f}%"
 
@@ -252,6 +262,7 @@ def to_markdown(report: dict[str, Any]) -> str:
                 "#",
                 "Agent",
                 "Model",
+                "Route",
                 "Reliability",
                 "Accuracy",
                 "Consistency",
@@ -266,6 +277,7 @@ def to_markdown(report: dict[str, Any]) -> str:
                     r["rank"],
                     r["agent_name"],
                     f"`{r['model']}`",
+                    route_label(r.get("route"), r.get("connection")),
                     _pct(r["reliability_score"]),
                     _pct(r["accuracy"]),
                     _pct(r["consistency"]),

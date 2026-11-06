@@ -54,6 +54,8 @@ class AgentOut(AgentBase):
 
     id: int
     created_at: datetime
+    route: str | None = Field(default=None, description="`bifrost` (through the gateway) or `direct`.")
+    connection: str | None = Field(default=None, description="Model connection name, for your own models.")
 
 
 class ToolOut(BaseModel):
@@ -117,6 +119,8 @@ class ExecutionOut(BaseModel):
 class ExecutionDetailOut(ExecutionOut):
     agent_name: str
     model: str
+    route: str | None = None
+    connection: str | None = None
     trace: list[TraceStepOut]
     freshness_check_id: int | None = Field(default=None, description="Latest stale-answer check, if any.")
 

@@ -81,7 +81,8 @@ class BifrostRoute:
         self.heal = heal
 
     def chat(self, model: str, messages: list[dict[str, Any]], **kw: Any) -> LLMResponse:
-        target = f"{self.provider}/{model}"
+        # Google lists models as "models/<name>"; Bifrost expects the bare "<provider>/<name>".
+        target = f"{self.provider}/{model.removeprefix('models/')}"
         try:
             return self.bifrost.chat(target, messages, **kw)
         except LLMError as exc:

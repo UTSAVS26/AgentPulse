@@ -158,7 +158,7 @@ curl -s localhost:8000/agents -H 'content-type: application/json' \
   -d '{"name": "Granite (mine)", "model": "custom/my-ollama/granite4:3b", "tools": ["calculator"]}'
 ```
 
-`POST/PUT /agents` reject `custom/<slug>/…` when no connection has that slug (`422`). `GET /models` (live)
+`POST/PUT /agents` reject `custom/<slug>/…` when no connection has that slug (`422`). Agents, leaderboard rows (`/runs/{id}/metrics`), execution details and reports carry `route` (`bifrost` | `direct`) and, for your own models, `connection`; never a key. `/health` adds `connections`: `total`, `ok`, `failing`, `untested` and `via_bifrost`. These are informational only and never make the status `degraded`. `GET /models` (live)
 lists connection models together with Bifrost's.
 
 ## Freshness

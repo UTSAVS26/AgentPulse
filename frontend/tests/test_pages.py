@@ -52,14 +52,14 @@ def test_home_renders_with_status_sidebar():
 
 def test_agents_page_lists_every_agent():
     agents = requests.get(f"{BACKEND}/agents", timeout=10).json()
-    at = app("pages/1_Agents.py")
+    at = app("pages/2_Agents.py")
     table = at.dataframe[0].value
     assert len(table) == len(agents)
     assert set(table["Name"]) == {a["name"] for a in agents}
 
 
 def test_try_agent_shows_answer_metrics_and_trace():
-    at = app("pages/1_Agents.py")
+    at = app("pages/2_Agents.py")
     at.radio[0].set_value("Arithmetic (calculator)").run()
     run_btn = next(b for b in at.button if b.label == "Run agent")
     run_btn.click().run()
@@ -73,7 +73,7 @@ def test_try_agent_shows_answer_metrics_and_trace():
 
 def test_create_then_delete_agent_through_form():
     name = f"UI test agent {uuid.uuid4().hex[:6]}"
-    at = app("pages/1_Agents.py")
+    at = app("pages/2_Agents.py")
     form_inputs = [t for t in at.text_input if t.label == "Name"]
     form_inputs[0].set_value(name)
     save = next(b for b in at.button if b.label == "Save")
@@ -89,7 +89,7 @@ def test_pages_degrade_gracefully_when_backend_is_down(monkeypatch):
     import api
 
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")  # nothing listens here
-    for page in ("Home.py", "pages/1_Agents.py"):
+    for page in ("Home.py", "pages/2_Agents.py"):
         at = AppTest.from_file(str(FRONTEND / page), default_timeout=TIMEOUT)
         at.run()
         assert not at.exception, [e.value for e in at.exception]
@@ -503,7 +503,7 @@ def _connection() -> dict:
 
 def test_models_page_lists_presets_and_connections():
     conn = _connection()
-    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/1_Models.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     preset = next(s for s in at.selectbox if s.label == "Start from")
@@ -514,7 +514,7 @@ def test_models_page_lists_presets_and_connections():
 
 
 def test_models_page_preset_prefills_base_url():
-    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/1_Models.py"), default_timeout=TIMEOUT)
     at.run()
     next(s for s in at.selectbox if s.label == "Start from").set_value("lmstudio").run()
     assert not at.exception, [e.value for e in at.exception]
@@ -524,7 +524,7 @@ def test_models_page_preset_prefills_base_url():
 
 def test_agents_page_offers_connection_models():
     conn = _connection()
-    at = AppTest.from_file(str(FRONTEND / "pages/1_Agents.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Agents.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     picker = next(s for s in at.selectbox if s.label == "Model")
@@ -538,19 +538,59 @@ def test_models_page_degrades_when_backend_down(monkeypatch):
     import api
 
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/1_Models.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
 
 
 def test_models_page_offers_bifrost_routing_for_native_providers():
-    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/1_Models.py"), default_timeout=TIMEOUT)
     at.run()
     next(s for s in at.selectbox if s.label == "Start from").set_value("gemini").run()
     assert not at.exception, [e.value for e in at.exception]
     box = next(c for c in at.checkbox if c.label.startswith("🛰️ Route through the Bifrost gateway"))
     assert box.value is True
     next(s for s in at.selectbox if s.label == "Start from").set_value("groq").run()
-    assert not any(c.label.startswith("🛰️ Route through") for c in at.checkbox)
+    # only the add form's checkbox: saved Bifrost-capable connections have one in their edit form too
+    assert not any(c.label == "🛰️ Route through the Bifrost gateway (recommended)" for c in at.checkbox)
     assert any("would mix the two" in c.value for c in at.caption)
+
+
+# ------------------------------------------------------------------------------------ v2.4: routes everywhere
+def test_agents_table_and_leaderboard_show_routes(finished_run):
+    _connection()
+    at = app("pages/2_Agents.py")
+    table = at.dataframe[0].value
+    assert "Route" in table.columns and (table["Route"] == "🛰️ Bifrost").any()
+    at = AppTest.from_file(str(FRONTEND / "pages/5_Compare.py"), default_timeout=TIMEOUT)
+    at.session_state["run_id"] = finished_run["id"]
+    at.run()
+    board = next(d.value for d in at.dataframe if "Reliability" in d.value.columns)
+    assert set(board["Route"]) == {"🛰️ Bifrost"}
+
+
+def test_sidebar_summarises_your_models():
+    _connection()
+    at = app("Home.py")
+    assert any(
+        c.value.startswith(("⚪ your models", "🟢 your models", "🔴 your models")) for c in at.sidebar.caption
+    )
+
+
+def test_home_explains_every_page():
+    at = app("Home.py")
+    text = " ".join(m.value for m in at.markdown)
+    for page in (
+        "Models",
+        "Agents",
+        "Suites",
+        "Run Benchmark",
+        "Compare",
+        "Traces",
+        "Stale-Answer Detector",
+        "Reports",
+    ):
+        assert "#### " in text and page in text, page
+    assert text.count("**What it does:**") == 8 and text.count("**Why:**") == 8
+    assert any("mock mode" in i.value or "live mode" in i.value for i in [*at.info, *at.success])

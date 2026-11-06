@@ -12,6 +12,7 @@ from ui import (
     execution_summary,
     page_setup,
     render_trace,
+    route_badge,
     run_label,
     show_error,
 )
@@ -117,6 +118,8 @@ if show_error(err):
 
 st.divider()
 title = f"Execution #{ex['id']} · {ex['agent_name']} · `{ex['model']}`"
+if ex.get("route"):
+    title += f" · {route_badge(ex['route'], ex.get('connection'))}"
 if ex["run_id"]:
     title += f" · run #{ex['run_id']} · repeat {ex['repeat_idx'] + 1}"
 st.markdown(f"### {title}")

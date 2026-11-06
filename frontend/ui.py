@@ -65,6 +65,14 @@ def sidebar_status() -> dict | None:
         for name, comp in data.get("components", {}).items():
             icon = "🟢" if comp["ok"] else "🔴"
             st.caption(f"{icon} {name}: {comp['detail']}")
+        conns = data.get("connections") or {}
+        if conns.get("total"):
+            parts = [f"{conns['ok']} ok"] + [
+                f"{conns[k]} {k}" for k in ("failing", "untested") if conns.get(k)
+            ]
+            icon = "🔴" if conns.get("failing") else ("🟢" if conns.get("ok") else "⚪")
+            via = f" · {conns['via_bifrost']} via Bifrost" if conns.get("via_bifrost") else ""
+            st.caption(f"{icon} your models: {', '.join(parts)}{via}")
         st.caption(f"Backend v{data['version']}")
     return data
 
@@ -90,6 +98,14 @@ def _access_code_box(live: bool) -> None:
             st.rerun()
         if st.session_state.get("access_code_error"):
             st.error(st.session_state["access_code_error"])
+
+
+def route_badge(route: str | None, connection: str | None = None) -> str:
+    """How an agent's model is called: 🛰️ through the Bifrost gateway or ↗️ directly."""
+    if route is None:
+        return "–"
+    badge = "🛰️ Bifrost" if route == "bifrost" else "↗️ direct"
+    return f"{badge} · {connection}" if connection else badge
 
 
 def nav_link(target: Any, page: str, label: str, icon: str | None = None) -> None:
@@ -248,6 +264,7 @@ def leaderboard_frame(board: list[dict]):
                 "Rank": r["rank"],
                 "Agent": r["agent_name"],
                 "Model": r["model"],
+                "Route": route_badge(r.get("route"), r.get("connection")),
                 "Reliability": pct(r["reliability_score"]),
                 "Accuracy": pct(r["accuracy"]),
                 "Consistency": pct(r["consistency"]),

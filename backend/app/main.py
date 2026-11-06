@@ -82,6 +82,11 @@ class HealthResponse(BaseModel):
     components: dict[str, ComponentStatus] = Field(
         description="`database`, `llm` (Bifrost or mock) and `search` (Tavily or mock)."
     )
+    connections: dict[str, int] = Field(
+        default_factory=dict,
+        description="Your model connections by last test result: `total`, `ok`, `failing`, `untested`, "
+        "`via_bifrost`. Informational: a failing connection doesn't make the backend degraded.",
+    )
 
 
 @app.get("/health", response_model=HealthResponse, summary="Backend health check", tags=["system"])
@@ -104,7 +109,27 @@ def health(
         live_available=live_available(settings),
         public_deployment=is_public_deployment(settings),
         components=components,
+        connections=_connection_summary(),
     )
+
+
+def _connection_summary() -> dict[str, int]:
+    from sqlalchemy import select
+
+    from app.models import ModelConnection
+
+    try:
+        with get_sessionmaker()() as db:
+            rows = db.execute(select(ModelConnection.last_check_ok, ModelConnection.route)).all()
+    except Exception:  # the database check above already reports a broken database
+        return {}
+    return {
+        "total": len(rows),
+        "ok": sum(ok is True for ok, _ in rows),
+        "failing": sum(ok is False for ok, _ in rows),
+        "untested": sum(ok is None for ok, _ in rows),
+        "via_bifrost": sum(route == "bifrost" for _, route in rows),
+    }
 
 
 class ModelsResponse(BaseModel):

@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 import api
-from ui import execution_summary, page_setup, render_trace, show_error
+from ui import execution_summary, page_setup, render_trace, route_badge, show_error
 
 page_setup("Agents", "🤖")
 st.title("🤖 Agents")
@@ -48,7 +48,7 @@ if agents:
             {
                 "ID": a["id"],
                 "Name": a["name"],
-                "Provider": a["model"].split("/", 1)[0],
+                "Route": route_badge(a.get("route"), a.get("connection")),
                 "Model": a["model"],
                 "Tools": ", ".join(a["tools"]) or "none",
                 "Max steps": a["max_steps"],

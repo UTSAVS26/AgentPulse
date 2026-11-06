@@ -42,8 +42,16 @@ the first load.
 <td><img src="docs/images/traces-timeline.png" alt="Trace timeline with injected faults"></td>
 </tr>
 <tr>
+<td><img src="docs/images/home.png" alt="Home: a plain-language guide to every page"></td>
+<td><img src="docs/images/models.png" alt="Models: bring your own model with a base URL"></td>
+</tr>
+<tr>
+<td><img src="docs/images/suites.png" alt="Suites: edit your own benchmark tasks in a table"></td>
 <td><img src="docs/images/compare-freshness.png" alt="Compare: freshness per agent"></td>
+</tr>
+<tr>
 <td><img src="docs/images/reports.png" alt="Reports page"></td>
+<td><img src="docs/images/compare-tasks.png" alt="Compare: pass rate per task (heatmap)"></td>
 </tr>
 </table>
 

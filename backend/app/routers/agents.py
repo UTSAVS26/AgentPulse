@@ -13,6 +13,7 @@ from app.agents.runtime import AgentSpec, RuntimeConfig, run_agent, save_executi
 from app.agents.tools import TOOLS
 from app.clients.router import CUSTOM_PREFIX, parse_custom
 from app.config import Settings, get_settings
+from app.connection_routes import describe_models
 from app.db import get_db
 from app.mode import Mode, get_mode, require_admin
 from app.models import Agent, FreshnessCheck, ModelConnection, TaskExecution
@@ -56,13 +57,26 @@ def _check_model(db: Session, model: str) -> None:
         )
 
 
+def _with_route(db: Session, agents: list[Agent]) -> list[AgentOut]:
+    routes = describe_models(db, [a.model for a in agents])
+    return [
+        AgentOut.model_validate(a).model_copy(
+            update={"route": routes[a.model]["route"], "connection": routes[a.model]["connection"]}
+        )
+        for a in agents
+    ]
+
+
 def execution_detail(db: Session, execution: TaskExecution) -> ExecutionDetailOut:
     agent = db.get(Agent, execution.agent_id)
+    route = describe_models(db, [agent.model]).get(agent.model, {}) if agent else {}
     return ExecutionDetailOut.model_validate(
         {
             **{c: getattr(execution, c) for c in ExecutionDetailOut.model_fields if hasattr(execution, c)},
             "agent_name": agent.name if agent else "(deleted)",
             "model": agent.model if agent else "",
+            "route": route.get("route"),
+            "connection": route.get("connection"),
             "trace": execution.trace,
             "freshness_check_id": db.scalar(
                 select(FreshnessCheck.id)
@@ -80,8 +94,8 @@ def list_tools() -> list[ToolOut]:
 
 
 @router.get("/agents", response_model=list[AgentOut], summary="List agents")
-def list_agents(db: Session = Depends(get_db)) -> list[Agent]:
-    return list(db.scalars(select(Agent).order_by(Agent.id)))
+def list_agents(db: Session = Depends(get_db)) -> list[AgentOut]:
+    return _with_route(db, list(db.scalars(select(Agent).order_by(Agent.id))))
 
 
 @router.post("/agents", response_model=AgentOut, status_code=201, summary="Create an agent")
@@ -95,8 +109,8 @@ def create_agent(body: AgentCreate, db: Session = Depends(get_db)) -> Agent:
 
 
 @router.get("/agents/{agent_id}", response_model=AgentOut, summary="Get one agent")
-def get_agent(agent_id: int, db: Session = Depends(get_db)) -> Agent:
-    return _get_agent(db, agent_id)
+def get_agent(agent_id: int, db: Session = Depends(get_db)) -> AgentOut:
+    return _with_route(db, [_get_agent(db, agent_id)])[0]
 
 
 @router.put(

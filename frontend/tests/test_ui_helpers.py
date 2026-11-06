@@ -10,3 +10,11 @@ def test_preview_markdown_shifts_headings_but_not_code_or_hashtags():
     assert out[5] == "# not a heading"  # inside a code fence
     assert out[7] == "#hashtag"  # no space: not a heading
     assert out[8] == "###### deep"  # capped at h6
+
+
+def test_route_badge():
+    from ui import route_badge
+
+    assert route_badge("bifrost") == "🛰️ Bifrost"
+    assert route_badge("direct", "My Ollama") == "↗️ direct · My Ollama"
+    assert route_badge(None) == "–"

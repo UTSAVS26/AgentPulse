@@ -2,6 +2,31 @@
 
 All notable changes per build phase.
 
+## [v2.4] Routes everywhere, plain-language Home, final polish
+
+### Added
+- **Home page rewritten for anyone:**
+  - what AgentPulse answers, in one line;
+  - whether you're in mock or live mode, and what that means;
+  - a 6-step *How to use it* (models → agents → tasks → run → results → freshness);
+  - **a card per page** saying *what it does* and *why you'd use it*, with a link;
+  - a glossary of every term (reliability, consistency, recovery, p50/p95, stale answer, Bifrost, Tavily…);
+  - the latest results.
+- **Route shown everywhere** (🛰️ Bifrost or ↗️ direct · *connection*): the Agents table, leaderboards (Run Benchmark, Compare), the Traces header, the Markdown report (*Route* column) and CSV (*Route*, *Connection*). The API exposes `route`/`connection` on agents, leaderboard rows and execution details. Keys never appear, which a test asserts across all report formats.
+- **Your models in the sidebar:** `/health` reports connections as ok / failing / untested / via Bifrost. This is informational only and never degrades the status.
+- Models page: before saving, a note says a test calls the provider **directly** (the Bifrost route starts after saving), and a tip suggests **Fetch models** when a provider rejects a model name.
+
+### Changed
+- Sidebar order follows the workflow: **Models** is now page 1 and Agents page 2 (URLs unchanged).
+- **`make ui-test` cleans up after itself:** runs created during the session, plus test connections and suites, are deleted (`frontend/tests/conftest.py`). Before, every run left "UI conn …" connections and test suites in your database. Existing leftovers were removed.
+
+### Fixed (found with a real Gemini key)
+- Google-style model names (`models/<name>`) gave a 404 through Bifrost. The prefix is now stripped on the Bifrost route.
+- A saved connection's test through Bifrost used the 120 s run timeout. It now uses the 45 s test budget (and the dashboard waits up to 150 s for slow tests).
+
+### Verified live
+- With a real Gemini key, registered in Bifrost at runtime: 61 models listed, `gemini-flash-lite-latest` answered "pong" in 2.5 s **through Bifrost**, tool calling ✓.
+
 ## [v2.3] Hosted providers through Bifrost (runtime registration)
 
 ### Added

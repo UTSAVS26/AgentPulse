@@ -147,7 +147,7 @@ with st.expander("➕ Add a model connection", expanded=not connections):
         res, err = api.post(
             "/connections/test",
             json={"base_url": base_url, "api_key": api_key or None, "model": models[0]},
-            timeout=120,
+            timeout=150,
         )
         if not show_error(err):
             _show_test(res)
@@ -223,7 +223,7 @@ for c in connections:
         )
         if t2.button("🧪 Test", key=f"test_{c['id']}", disabled=locked):
             body = {"model": test_model} if c["models"] else {}
-            res, err = api.post(f"/connections/{c['id']}/test", json=body, timeout=120)
+            res, err = api.post(f"/connections/{c['id']}/test", json=body, timeout=150)
             if not show_error(err):
                 _show_test(res)
         if t3.button("🤖 New agent", key=f"agent_{c['id']}", disabled=not c["models"]):
@@ -233,7 +233,7 @@ for c in connections:
                 else c["model_ids"][0]
             )
             st.session_state["prefill_agent_name"] = f"{c['name']} · {test_model}"
-            st.switch_page("pages/1_Agents.py")
+            st.switch_page("pages/2_Agents.py")
 
         with st.expander("✏️ Edit / delete"):
             with st.form(f"edit_{c['id']}"):
@@ -283,4 +283,4 @@ st.divider()
 st.caption(
     "Built-in models (no setup): everything Bifrost routes, e.g. `groq/…`, `openrouter/…`, `ollama/…`."
 )
-nav_link(st, "pages/1_Agents.py", "Create an agent", "🤖")
+nav_link(st, "pages/2_Agents.py", "Create an agent", "🤖")

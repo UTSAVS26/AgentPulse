@@ -57,6 +57,13 @@ def get_bifrost() -> BifrostClient:
 
 
 @lru_cache
+def get_test_bifrost(timeout_s: float = 45.0) -> BifrostClient:
+    """Bifrost client with a short timeout, for connection tests (the 120 s LLM budget is for runs)."""
+    s = get_settings()
+    return BifrostClient(s.bifrost_url, timeout_s=timeout_s, health_timeout_s=s.health_timeout_s)
+
+
+@lru_cache
 def get_live_llm() -> ModelRouter:
     """Live LLM traffic: Bifrost for built-in providers, direct clients for user model connections."""
     from app.db import get_sessionmaker

@@ -154,3 +154,32 @@ def reregister(slug: str) -> bool:
         except Exception as exc:
             log.warning("Re-registering %s in Bifrost failed: %s", slug, exc)
             return False
+
+
+def describe_models(db: Session, models: list[str]) -> dict[str, dict[str, str | None]]:
+    """How each model id is called, for display: ``route`` (``bifrost`` | ``direct``), ``provider`` and,
+    for the user's own models, the ``connection`` name. Built-in ids always go through Bifrost."""
+    from app.clients.router import parse_custom  # lazy: avoids an import cycle
+
+    slugs = {p[0] for m in models if (p := parse_custom(m))}
+    conns = (
+        {c.slug: c for c in db.scalars(select(ModelConnection).where(ModelConnection.slug.in_(slugs)))}
+        if slugs
+        else {}
+    )
+    out: dict[str, dict[str, str | None]] = {}
+    for m in models:
+        parsed = parse_custom(m)
+        if parsed is None:
+            out[m] = {
+                "route": "bifrost",
+                "provider": m.split("/", 1)[0] if "/" in m else None,
+                "connection": None,
+            }
+            continue
+        conn = conns.get(parsed[0])
+        if conn is None:
+            out[m] = {"route": "direct", "provider": None, "connection": f"{parsed[0]} (deleted)"}
+        else:
+            out[m] = {"route": conn.route, "provider": conn.provider or conn.preset, "connection": conn.name}
+    return out

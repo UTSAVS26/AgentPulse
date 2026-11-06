@@ -142,6 +142,7 @@ def fake(monkeypatch):
     import app.clients as clients_pkg
 
     monkeypatch.setattr(clients_pkg, "get_bifrost", lambda: client)
+    monkeypatch.setattr(clients_pkg, "get_test_bifrost", lambda timeout_s=45.0: client)
     bifrost.client = client
     return bifrost
 
@@ -329,3 +330,9 @@ def test_unexpected_registration_error_still_saves_the_connection(api, fake, mon
     monkeypatch.setattr(connection_routes, "register", boom)
     c = add(api)
     assert c["route"] == "direct" and "RuntimeError: surprise" in c["route_reason"]
+
+
+def test_google_style_model_names_are_sent_bare_through_bifrost(fake):
+    route = BifrostRoute(fake.client, "groq", heal=lambda: False)
+    assert route.chat("models/model-a", [{"role": "user", "content": "hi"}]).content == "pong"
+    assert fake.chats[-1] == "groq/model-a"

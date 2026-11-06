@@ -26,7 +26,17 @@ Browser zoom 90%, dark theme, one tab per page you'll show.
 > identical tasks through the Bifrost gateway, and *is its answer still true today?*, with stale-answer
 > detection verified live with Tavily."
 
-Point at the sidebar: **mock / live mode** and component health. Point at **Latest results**.
+Point at **How to use it** and the **What each page does** cards: every page is explained in plain words.
+Point at the sidebar: **mock / live mode**, component health and *your models*.
+
+### 1b. Models: bring your own (30 s, live)
+**Models** → **➕ Add a model connection** → **Ollama** preset → **🔍 Fetch models**, pick one, then
+**🧪 Test first model** and **💾 Save**.
+> "Any OpenAI-compatible model plugs in: a laptop model, or OpenAI, Anthropic or Gemini with your own key. Hosted
+> providers are registered *inside Bifrost* at runtime, so they take the same gateway path as everything else.
+> Keys are encrypted and never shown again."
+
+Point at the card: 🛰️ via Bifrost or ↗️ direct, **and why**, plus tool support ✓/✗. Then **🤖 New agent**.
 
 ### 2. Agents (30 s)
 > "An agent is a model plus a system prompt, tools and a step budget. Six are pre-configured across Groq,
@@ -37,6 +47,11 @@ then **Run agent**. Show the trace: the tool call, then the 💥 injected fault,
 correct answer.
 > "We inject faults on purpose: timeouts, HTTP 500s, empty and malformed results. Reliability means
 > recovering from them."
+
+### 2b. Suites: build your own benchmark (20 s)
+**Suites** → *Math & Reasoning* → **📄 Duplicate**, edit a cell, add a row, **💾 Save changes**. Open
+**🧪 Test a scorer** and grade a sample answer.
+> "Built-in test sets are read-only. Duplicate one, or import a CSV, and benchmark on *your* questions."
 
 ### 3. Run Benchmark (40 s)
 Choose *Current Events (time-sensitive)* and 3 agents, including the **no-tools baseline**. Set repeats to
@@ -87,7 +102,7 @@ Download the **Markdown report** and show the preview.
 > stale answers with their corrections and sources."
 
 ### Close (10 s)
-> "One gateway for every model, Bifrost, so the comparison is fair. Live verification, Tavily, so answers are
+> "Bring any model, build any benchmark. One gateway for every model, Bifrost, so the comparison is fair. Live verification, Tavily, so answers are
 > checked against today's world, not training data. It works offline in mock mode and is deployed publicly."
 
 ## Fallback plan

@@ -4,11 +4,11 @@ Streamlit app in [`frontend/`](../frontend/). Pages appear in the sidebar in thi
 
 | Page | What it's for |
 |---|---|
-| **Home** | Overview, a snapshot of the latest finished run (top agents, links to Compare, Traces, Detector and Reports), and system status plus mock/live mode in the sidebar |
+| **Home** | A plain-language guide: what AgentPulse answers, whether you're in mock or live mode, a 6-step *How to use it*, a card per page (**what it does**, **why** you'd use it, a link), a glossary of the terms used, and the latest results. The sidebar shows mode, component health and *your models* (ok / failing / untested, how many go via Bifrost). |
 | **🔌 Models** | Bring your own model: connect any OpenAI-compatible endpoint (presets for Ollama, LM Studio, vLLM, OpenAI, Anthropic, Gemini…), fetch its models, test chat and tool calling, then create an agent from it. See [models.md](models.md). |
 | **🤖 Agents** | List, create, edit and delete agents; **try** an agent on one prompt with fault injection and see its trace |
 | **🧪 Suites** | Build your own benchmarks: create, duplicate, import/export (YAML, CSV) suites; edit tasks in a table; test a scorer on a sample answer. Built-ins are read-only. |
-| **🏁 Run Benchmark** | Configure suite × agents × repeats × fault rate, watch live progress, partial leaderboard, all executions |
+| **🏁 Run Benchmark** | Configure suite × agents × repeats × fault rate, watch live progress, partial leaderboard, all executions. Leaderboards everywhere show each agent's **route**: 🛰️ Bifrost or ↗️ direct · *connection*. |
 | **📊 Compare** | Multi-agent comparison for one run: headline tiles, leaderboard, charts |
 | **🔍 Traces** | Step-by-step view of a single execution |
 | **🕰️ Stale-Answer Detector** | Check any text, or an agent's answer, for claims that are no longer true (live Tavily sources with dates) |

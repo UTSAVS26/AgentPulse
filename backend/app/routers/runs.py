@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.bench.engine import BenchmarkEngine, RunValidationError, get_bench_engine, task_lookup
 from app.bench.metrics import ExecRecord, run_metrics
+from app.connection_routes import describe_models
 from app.db import get_db
 from app.mode import Mode, get_mode, require_admin
 from app.models import Agent, BenchmarkRun, Task, TaskExecution, TaskSuite
@@ -25,10 +26,16 @@ def _get_run(db: Session, run_id: int) -> BenchmarkRun:
 
 def _agent_info(db: Session, ids: list[int]) -> dict[int, dict]:
     found = {a.id: a for a in db.scalars(select(Agent).where(Agent.id.in_(ids)))}
+    routes = describe_models(db, [a.model for a in found.values()])
     return {
         i: {
             "name": found[i].name if i in found else f"(deleted agent {i})",
             "model": found[i].model if i in found else "",
+            **(
+                routes.get(found[i].model, {})
+                if i in found
+                else {"route": None, "provider": None, "connection": None}
+            ),
         }
         for i in ids
     }
@@ -161,7 +168,11 @@ def metrics_payload(db: Session, run: BenchmarkRun) -> dict:
         ExecRecord.from_orm(e)
         for e in db.scalars(select(TaskExecution).where(TaskExecution.run_id == run_id))
     ]
-    metrics = run_metrics(records, _agent_info(db, run.agent_ids), task_lookup(db, run.suite_id))
+    agents = _agent_info(db, run.agent_ids)
+    metrics = run_metrics(records, agents, task_lookup(db, run.suite_id))
+    for row in metrics["leaderboard"]:  # how each agent's model was called (Bifrost or direct)
+        info = agents.get(row["agent_id"], {})
+        row.update(route=info.get("route"), provider=info.get("provider"), connection=info.get("connection"))
     return {"run": run_out(db, run).model_dump(mode="json"), **metrics}
 
 
