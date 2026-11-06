@@ -62,19 +62,61 @@ def build_client(
     )
 
 
-class ConnectionRegistry:
-    """Direct clients for model connections, cached by slug and rebuilt when the row changes."""
+class BifrostRoute:
+    """A connection registered in Bifrost: calls go to Bifrost as ``<provider>/<model>``.
 
-    def __init__(self, sessions: Callable[[], Session], settings: Settings | None = None):
+    Bifrost forgets runtime registrations when it restarts. If it answers "unknown provider", the
+    connection is re-registered (``heal``) and the call retried once."""
+
+    MISSING_MARKERS = (
+        "failed to get config for provider",
+        "provider not found",
+        "no keys",
+        "config for provider",
+    )
+
+    def __init__(self, bifrost: LLMClient, provider: str, heal: Callable[[], bool]):
+        self.bifrost = bifrost
+        self.provider = provider
+        self.heal = heal
+
+    def chat(self, model: str, messages: list[dict[str, Any]], **kw: Any) -> LLMResponse:
+        target = f"{self.provider}/{model}"
+        try:
+            return self.bifrost.chat(target, messages, **kw)
+        except LLMError as exc:
+            if not any(m in (exc.message or "").lower() for m in self.MISSING_MARKERS) or not self.heal():
+                raise
+            return self.bifrost.chat(target, messages, **kw)
+
+    def list_models(self) -> list[str]:
+        prefix = f"{self.provider}/"
+        return sorted(m[len(prefix) :] for m in self.bifrost.list_models() if m.startswith(prefix))
+
+    def ping(self) -> tuple[bool, str]:
+        return self.bifrost.ping()
+
+
+class ConnectionRegistry:
+    """Clients for model connections (direct, or through Bifrost), cached by slug and rebuilt when the row
+    changes."""
+
+    def __init__(
+        self,
+        sessions: Callable[[], Session],
+        settings: Settings | None = None,
+        bifrost: LLMClient | None = None,
+    ):
         self.sessions = sessions
         self.settings = settings
-        self._clients: dict[str, tuple[datetime | None, OpenAICompatibleClient]] = {}
+        self.bifrost = bifrost
+        self._clients: dict[str, tuple[datetime | None, Any]] = {}
         self._lock = threading.Lock()
 
     def _settings(self) -> Settings:
         return self.settings or get_settings()
 
-    def client(self, slug: str) -> OpenAICompatibleClient:
+    def client(self, slug: str) -> Any:
         from app import crypto, net_guard
         from app.models import ModelConnection
 
@@ -86,6 +128,13 @@ class ConnectionRegistry:
                 cached = self._clients.get(slug)
                 if cached and cached[0] == conn.updated_at:
                     return cached[1]
+            if conn.route == "bifrost" and conn.provider and self.bifrost is not None:
+                from app.connection_routes import reregister  # lazy: avoids an import cycle
+
+                client: Any = BifrostRoute(self.bifrost, conn.provider, heal=lambda: reregister(slug))
+                with self._lock:
+                    self._clients[slug] = (conn.updated_at, client)
+                return client
             try:
                 key = crypto.decrypt(conn.api_key_enc) if conn.api_key_enc else None
                 client = build_client(conn.base_url, key, self._settings(), label=conn.name)
@@ -152,6 +201,21 @@ class ModelRouter:
 
     def ping(self) -> tuple[bool, str]:
         return self.bifrost.ping()
+
+
+def bifrost_model_id(model: str) -> str | None:
+    """``custom/<slug>/<model>`` of a Bifrost-routed connection → ``<provider>/<model>`` (else None)."""
+    parsed = parse_custom(model)
+    if parsed is None:
+        return None
+    from app.db import get_sessionmaker
+    from app.models import ModelConnection
+
+    with get_sessionmaker()() as db:
+        conn = db.scalar(select(ModelConnection).where(ModelConnection.slug == parsed[0]))
+        if conn is None or conn.route != "bifrost" or not conn.provider:
+            return None
+        return f"{conn.provider}/{parsed[1]}"
 
 
 def connection_prices(model: str) -> tuple[float, float] | None:

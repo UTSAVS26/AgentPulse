@@ -5,14 +5,37 @@ Agents can use two kinds of models:
 | Kind | Model id | How it is called |
 |---|---|---|
 | **Built-in** | `groq/…`, `openrouter/…`, `ollama/…` | Through the **Bifrost** gateway, using the keys in `.env` (see [bifrost.md](bifrost.md)) |
-| **Your own** (a *model connection*) | `custom/<slug>/<model>` | **Directly**, by the backend, to the connection's OpenAI-compatible base URL |
+| **Your own** (a *model connection*) | `custom/<slug>/<model>` | **Through Bifrost** for hosted providers it supports natively (registered at runtime with your key), otherwise **directly** to the connection's OpenAI-compatible base URL |
 
 A connection is any server that speaks the OpenAI chat API (`POST <base>/chat/completions`). That covers
 almost every local runtime and most hosted providers. Add one on the **🔌 Models** page, or with
 `POST /connections` ([api.md](api.md#model-connections)).
 
-> v2.3 adds runtime registration of hosted providers *in Bifrost* (OpenAI, Anthropic, Gemini…), so their traffic
-> also goes through the gateway. Until then, hosted providers connect through their OpenAI-compatible endpoints.
+## Routes: through Bifrost or direct
+
+Every connection shows its **route** (🛰️ via Bifrost or ↗️ direct) and **why**:
+
+| Connection | Route | Why |
+|---|---|---|
+| OpenAI, Anthropic, Gemini, Mistral, DeepSeek, xAI, Cerebras, Cohere, Perplexity, with *Route through the Bifrost gateway* ticked (the default) | 🛰️ **Bifrost** | The provider and your key are **registered in Bifrost at runtime**, so calls take the same gateway path as the built-in models (fair comparisons, one audit trail, catalogue pricing). |
+| Self-hosted (Ollama, LM Studio, vLLM, llama.cpp…) or a custom URL | ↗️ direct | An arbitrary `base_url` can only be set through Bifrost's API with an admin session |
+| Groq or OpenRouter with your own key | ↗️ direct | Bifrost already holds keys for them and **load-balances across all keys of a provider**, so yours would be mixed with the built-in key |
+| A second connection to a provider that is already routed through Bifrost | ↗️ direct | Same reason: the two keys would be shared |
+| No `BIFROST_SETUP_TOKEN`, Bifrost without a config store (the free Render deployment), or registration failed | ↗️ direct | The connection still works, through the provider's OpenAI-compatible endpoint |
+
+On save, Bifrost **checks the key itself**, and the result is shown on the connection (e.g. "Bifrost key check:
+API key not valid"). Agents always use `custom/<slug>/<model>`, so a connection can switch route without
+breaking any agent. Bifrost-routed calls are sent to Bifrost as `<provider>/<model>`.
+
+**Bifrost forgets runtime registrations when it restarts** (its `config.json` is the source of truth), so
+AgentPulse's database is the source of truth instead:
+
+- testing a connection re-registers it;
+- when Bifrost answers "unknown provider", the call **re-registers the connection and retries once**
+  (self-healing).
+
+Deleting a connection, or switching it to direct, removes its key from Bifrost, and the provider too once it
+has no keys left. Providers from `config.json` are never touched. Details: [bifrost.md](bifrost.md#runtime-provider-registration).
 
 ## Adding a connection
 
@@ -80,6 +103,7 @@ input and output tokens on the connection: benchmark costs then use them, with t
 | Variable | Default | Purpose |
 |---|---|---|
 | `APP_SECRET` | *(generated)* | Encrypts stored connection API keys |
+| `BIFROST_SETUP_TOKEN` | *(empty)* | Shared by Bifrost and the backend: unlocks Bifrost's management API for runtime registration. Empty = hosted connections are called directly. |
 | `APP_SECRET_FILE` | temp directory; `/data/app_secret` in compose | Where a generated secret is kept |
 | `LOCALHOST_ALIAS` | *(empty)*; `host.docker.internal` in compose | What `localhost` in a connection URL is rewritten to |
 | `ALLOW_PRIVATE_ENDPOINTS` | allowed locally, blocked on the public demo | Network policy for connection URLs |
@@ -94,6 +118,21 @@ input and output tokens on the connection: benchmark costs then use them, with t
 - The agent runtime, benchmark engine, LLM judge and stale-answer detector therefore need no changes.
 - Clients are cached per connection and rebuilt when the connection's `updated_at` changes. The URL policy is
   re-checked on every rebuild.
+
+## Validated live (2026-11-06): routing through Bifrost
+
+Against the real Bifrost (pinned image):
+
+1. A Gemini connection was registered at runtime. Bifrost's key check came back ("API key not valid", a
+   dummy key) and was shown on the connection.
+2. An agent's call went through Bifrost to Google: the error is Google's own.
+3. After restarting Bifrost the provider was gone. The next call **re-registered it and retried**, and
+   reached Google again.
+4. Deleting the connection removed the key and the provider from Bifrost.
+5. A Groq connection with a user key stayed direct, with the reason shown.
+
+The success path (a chat through Bifrost on a key added at runtime) was verified with a Groq key during the
+spike.
 
 ## Validated live (2026-11-05)
 

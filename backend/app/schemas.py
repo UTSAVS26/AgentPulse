@@ -384,6 +384,16 @@ class ConnectionBase(BaseModel):
     price_output_per_m: float | None = Field(
         default=None, ge=0, description="USD per 1M output tokens (optional)."
     )
+    provider: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Bifrost provider name for hosted APIs (`openai`, `anthropic`, `gemini`, `mistral`, …).",
+    )
+    via_bifrost: bool = Field(
+        default=False,
+        description="Register this provider + key in Bifrost at runtime so calls go through the gateway "
+        "(falls back to direct calls when that isn't possible; see `route_reason`).",
+    )
 
     @field_validator("name")
     @classmethod
@@ -423,7 +433,10 @@ class ConnectionOut(BaseModel):
     name: str
     slug: str
     kind: str
-    route: str
+    route: str = Field(description="`bifrost` (registered in the gateway) or `direct`.")
+    provider: str | None = None
+    route_reason: str | None = Field(default=None, description="Why this route was chosen.")
+    bifrost_key_status: str | None = Field(default=None, description="Bifrost's own check of the key.")
     preset: str | None
     base_url: str
     has_api_key: bool
@@ -485,3 +498,6 @@ class PresetOut(BaseModel):
     needs_key: bool
     model_hint: str
     bifrost_provider: str | None
+    via_bifrost: bool = Field(
+        default=False, description="Can be registered in Bifrost (a native provider with no built-in key)."
+    )

@@ -208,6 +208,9 @@ class ModelConnection(Base):
     slug: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     kind: Mapped[str] = mapped_column(String(30), default="openai_compatible")  # openai_compatible | hosted
     route: Mapped[str] = mapped_column(String(20), default="direct")  # direct | bifrost
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True)  # Bifrost provider (hosted kind)
+    route_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bifrost_key_status: Mapped[str | None] = mapped_column(Text, nullable=True)
     preset: Mapped[str | None] = mapped_column(String(40), nullable=True)
     base_url: Mapped[str] = mapped_column(Text)
     api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)

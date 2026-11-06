@@ -80,10 +80,15 @@ class PriceBook:
 
     def price(self, model: str) -> Price:
         if model.startswith("custom/"):  # a user's model connection: its own prices, or free
-            from app.clients.router import connection_prices
+            from app.clients.router import bifrost_model_id, connection_prices
 
             per_m = connection_prices(model)
             if per_m is None:
+                native = bifrost_model_id(model)  # routed through Bifrost: its catalogue knows the price
+                if native:
+                    p = self.price(native)
+                    if p.source != "unknown":
+                        return Price(p.input_per_token, p.output_per_token, f"{p.source} (via connection)")
                 return Price(0.0, 0.0, "connection (no price set)")
             return Price(per_m[0] / 1e6, per_m[1] / 1e6, "connection")
         with self._lock:

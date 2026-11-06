@@ -123,6 +123,21 @@ def main() -> int:
         (no_code, status, private),
     )
 
+    hosted = {
+        "name": "Smoke Gemini",
+        "base_url": "https://8.8.4.4/v1",
+        "models": ["m"],
+        "api_key": "AIza-smoke-0000",
+        "provider": "gemini",
+        "via_bifrost": True,
+    }
+    status, h = call("POST", "/connections", hosted, code=CODE)
+    check(
+        "hosted connection falls back to direct on the cloud image (no Bifrost config store/token)",
+        status == 201 and h.get("route") == "direct" and bool(h.get("route_reason")),
+        (status, h.get("route"), h.get("route_reason")),
+    )
+
     check("wrong access code -> 401", call("GET", "/health", code="nope")[0] == 401)
     status, live = call("GET", "/health", code=CODE)
     check("right access code -> live mode", status == 200 and live.get("mock_mode") is False, live)

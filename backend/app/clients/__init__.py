@@ -61,7 +61,8 @@ def get_live_llm() -> ModelRouter:
     """Live LLM traffic: Bifrost for built-in providers, direct clients for user model connections."""
     from app.db import get_sessionmaker
 
-    return ModelRouter(get_bifrost(), ConnectionRegistry(get_sessionmaker()))
+    bifrost = get_bifrost()
+    return ModelRouter(bifrost, ConnectionRegistry(get_sessionmaker(), bifrost=bifrost))
 
 
 @lru_cache

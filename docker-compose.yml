@@ -24,6 +24,8 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      # Unlocks Bifrost's management API (runtime provider registration). Shared with the backend.
+      BIFROST_SETUP_TOKEN: ${BIFROST_SETUP_TOKEN:-}
     volumes:
       - bifrost-data:/app/data
       - ./bifrost/config.json:/app/data/config.json:ro
@@ -42,6 +44,7 @@ services:
     environment:
       MOCK_MODE: ${MOCK_MODE:-true}
       BIFROST_URL: http://bifrost:8080
+      BIFROST_SETUP_TOKEN: ${BIFROST_SETUP_TOKEN:-}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       LIVE_ACCESS_CODE: ${LIVE_ACCESS_CODE:-}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agentpulse}:${POSTGRES_PASSWORD:-agentpulse}@postgres:5432/${POSTGRES_DB:-agentpulse}

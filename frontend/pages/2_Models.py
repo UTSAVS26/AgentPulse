@@ -31,6 +31,7 @@ connections, err2 = api.get("/connections")
 if show_error(err or err2):
     st.stop()
 by_preset = {p["id"]: p for p in presets}
+ROUTABLE = {p["bifrost_provider"] for p in presets if p.get("via_bifrost")}  # native, no built-in key
 locked = public and not live
 
 
@@ -85,6 +86,21 @@ with st.expander("➕ Add a model connection", expanded=not connections):
         key="new_key",
         help="Stored encrypted and never shown again.",
     )
+    via_bifrost = False
+    if preset.get("via_bifrost"):
+        via_bifrost = st.checkbox(
+            "🛰️ Route through the Bifrost gateway (recommended)",
+            value=True,
+            key=f"new_via_{preset_id}",
+            help="Your key is registered in Bifrost at runtime, so calls go through the same gateway as the "
+            "built-in models. If that isn't possible here, the connection calls the provider directly and "
+            "says why.",
+        )
+    elif preset.get("bifrost_provider") in ("groq", "openrouter"):
+        st.caption(
+            f"Called directly: Bifrost already has its own {preset['label'].split(' (')[0]} key, and adding "
+            "yours there would mix the two."
+        )
     if preset["group"] == "local":
         st.caption(
             "Running locally: `localhost` is fine. Inside Docker it is translated to your machine "
@@ -131,6 +147,8 @@ with st.expander("➕ Add a model connection", expanded=not connections):
             "base_url": base_url,
             "api_key": api_key or None,
             "models": models,
+            "provider": preset.get("bifrost_provider"),
+            "via_bifrost": via_bifrost,
             "price_input_per_m": price_in or None,
             "price_output_per_m": price_out or None,
         }
@@ -162,7 +180,8 @@ for c in connections:
         h1, h2 = st.columns([3, 2])
         h1.markdown(f"**{c['name']}** · `{c['slug']}` · {status}")
         h1.caption(
-            f"{c['base_url']} · {'via Bifrost' if c['route'] == 'bifrost' else 'direct'} · "
+            (f"🛰️ via Bifrost ({c['provider']})" if c["route"] == "bifrost" else f"↗️ direct · {c['base_url']}")
+            + " · "
             + (f"key {c['key_hint']}" if c["has_api_key"] else "no key")
             + (
                 f" · ${c['price_input_per_m']:g} / ${c['price_output_per_m'] or 0:g} per 1M"
@@ -172,6 +191,10 @@ for c in connections:
         )
         if c["last_check_detail"]:
             h2.caption(f"Last test: {c['last_check_detail']}")
+        if c["route_reason"]:
+            h2.caption(("ℹ️ " if c["route"] == "bifrost" else "↗️ ") + c["route_reason"])
+        if c["bifrost_key_status"]:
+            (h2.caption if "accepted" in c["bifrost_key_status"] else h2.warning)(c["bifrost_key_status"])
         tools = {True: "🛠️ tools ✓", False: "🛠️ tools ✗", None: ""}[c["supports_tools"]]
         st.markdown(
             "Models: "
@@ -210,6 +233,9 @@ for c in connections:
                 e_more = st.text_input("Add model names", placeholder="comma-separated")
                 e_key = st.text_input("New API key (leave empty to keep)", type="password")
                 e_clear = st.checkbox("Remove the stored key", disabled=not c["has_api_key"])
+                e_via = False
+                if c["provider"] in ROUTABLE:
+                    e_via = st.checkbox("🛰️ Route through the Bifrost gateway", value=c["kind"] == "hosted")
                 q1, q2 = st.columns(2)
                 e_pin = q1.number_input(
                     "USD / 1M input", min_value=0.0, value=float(c["price_input_per_m"] or 0)
@@ -225,6 +251,8 @@ for c in connections:
                         "models": list(dict.fromkeys([*e_models, *_models_text(e_more)])),
                         "api_key": e_key or None,
                         "clear_api_key": e_clear,
+                        "provider": c["provider"],
+                        "via_bifrost": e_via,
                         "price_input_per_m": e_pin or None,
                         "price_output_per_m": e_pout or None,
                     }

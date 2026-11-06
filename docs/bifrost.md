@@ -44,6 +44,28 @@ It is mounted read-only at `/app/data/config.json`, and Bifrost's runtime state 
 2. Pass `MY_KEY` to the `bifrost` service in `docker-compose.yml` and add it to `.env.example`.
 3. Run `docker compose up -d --force-recreate --wait bifrost`, then `make models` to confirm.
 
+## Runtime provider registration
+
+Hosted [model connections](models.md) are registered in Bifrost while it runs
+(`backend/app/clients/bifrost_admin.py`, `backend/app/connection_routes.py`). What we verified against the
+pinned image:
+
+| Behaviour | Result |
+|---|---|
+| Management API without auth | **Locked**: Bifrost requires `X-Bifrost-Setup-Token` (its `BIFROST_SETUP_TOKEN`). Missing → 401, wrong → 403. |
+| `POST /api/providers {"provider": p}` | Added immediately, **no restart**. 409 if it exists. |
+| `POST /api/providers/{p}/keys` | Added, and **Bifrost validates the key** (`status: success` or `list_models_failed` + `description`). `keys` is `null` for a provider without keys. |
+| `DELETE /api/providers/{p}/keys/{id}`, `DELETE /api/providers/{p}` | Work immediately |
+| Chat with `p/model` right after registering | Routed with the new key (`routing_info.key`) |
+| Bifrost restart with `source_of_truth: "config.json"` | **Runtime additions are dropped.** AgentPulse re-registers on demand (self-healing). |
+| Config store disabled (`config.cloud.json`) | Adding a provider fails: "config store not found". Hosted connections fall back to direct. |
+| Config store on SQLite at 0.1 CPU (Render free) | "database is locked" errors return (4 in 3 minutes), so it stays **disabled on Render** |
+
+Setup: compose passes the same `BIFROST_SETUP_TOKEN` (from `.env`) to Bifrost and the backend. Generate one with
+`python -c "import secrets;print(secrets.token_urlsafe(24))"`. The token only works while Bifrost's dashboard
+auth is off, which it is here. Keep it secret: it grants full control of the gateway (port 8080 is published on
+your machine).
+
 ## Backend client (`backend/app/clients/llm.py`)
 
 `BifrostClient` uses plain `httpx` rather than an SDK, which gives full control over:

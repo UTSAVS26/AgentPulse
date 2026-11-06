@@ -104,6 +104,21 @@ def nav_link(target: Any, page: str, label: str, icon: str | None = None) -> Non
         target.markdown(f"{icon + ' ' if icon else ''}[{label}]({slug})")
 
 
+def preview_markdown(md: str, shift: int = 2) -> str:
+    """Shift a document's headings down ``shift`` levels so it reads as a preview inside a page
+    (``# Title`` → ``### Title``); lines inside code fences are left alone."""
+    out, fenced = [], False
+    for line in md.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        if not fenced and line.startswith("#"):
+            level = len(line) - len(line.lstrip("#"))
+            if line[level : level + 1] == " ":
+                line = "#" * min(6, level + shift) + line[level:]
+        out.append(line)
+    return "\n".join(out)
+
+
 def tile(target: Any, label: str, value: str, sub: str | None = None, help: str | None = None) -> None:
     """A stat tile: label, big value, and an optional plain caption underneath.
 

@@ -30,7 +30,7 @@
 |---|---|---|
 | **Streamlit frontend** (`frontend/`) | Dashboard pages. Talks only to the backend through `frontend/api.py`, which turns every failure into a friendly message. | Home, Agents, Run Benchmark, Compare, Traces, Stale-Answer Detector, Reports (`ui.py` helpers, `charts.py` Plotly builders) |
 | **FastAPI backend** (`backend/app/`) | Orchestration, agent runtime, scoring, metrics, freshness verification, reports. OpenAPI at `/docs`. | Agents, suites, runs, freshness, reports APIs; agent runtime; benchmark engine (scoring, pricing, metrics); stale-answer detector; demo-data seeding |
-| **Model connections** (`routers/connections.py`, `clients/router.py`) | User-added OpenAI-compatible endpoints, called directly. Keys are encrypted at rest (`crypto.py`) and URLs checked by `net_guard.py`. See [models.md](models.md). | Verified live with local Ollama |
+| **Model connections** (`routers/connections.py`, `clients/router.py`, `connection_routes.py`, `clients/bifrost_admin.py`) | User-added models: hosted providers registered in Bifrost at runtime (self-healing after Bifrost restarts), everything else called directly. Keys are encrypted at rest (`crypto.py`) and URLs checked by `net_guard.py`. See [models.md](models.md). | Verified live with local Ollama |
 | **Bifrost** (`bifrost/config.json`) | Single OpenAI-compatible endpoint for all LLM providers. It holds the provider keys, so the backend never sees them. Models are addressed as `provider/model`. | Groq, OpenRouter, Ollama, all verified live |
 | **Tavily** | Live web search used by the agents' `web_search` tool and by the stale-answer detector. | Verified live (agents and detector) |
 | **PostgreSQL** | Persistent results, history and traces. | 8 tables, created on startup |

@@ -542,3 +542,15 @@ def test_models_page_degrades_when_backend_down(monkeypatch):
     at.run()
     assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
+
+
+def test_models_page_offers_bifrost_routing_for_native_providers():
+    at = AppTest.from_file(str(FRONTEND / "pages/2_Models.py"), default_timeout=TIMEOUT)
+    at.run()
+    next(s for s in at.selectbox if s.label == "Start from").set_value("gemini").run()
+    assert not at.exception, [e.value for e in at.exception]
+    box = next(c for c in at.checkbox if c.label.startswith("🛰️ Route through the Bifrost gateway"))
+    assert box.value is True
+    next(s for s in at.selectbox if s.label == "Start from").set_value("groq").run()
+    assert not any(c.label.startswith("🛰️ Route through") for c in at.checkbox)
+    assert any("would mix the two" in c.value for c in at.caption)

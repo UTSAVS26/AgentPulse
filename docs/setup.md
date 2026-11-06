@@ -26,6 +26,7 @@ cp .env.example .env
 | `LLM_TIMEOUT_S` / `SEARCH_TIMEOUT_S` | `120` / `20` | Outbound request timeouts |
 | `LIVE_ACCESS_CODE` | – | Public-demo mode: with `MOCK_MODE=true`, requests are mock unless they send this code (dashboard sidebar → *Unlock live mode*). Admin actions also need it. See [deployment.md](deployment.md). |
 | `JUDGE_MODEL` | `groq/openai/gpt-oss-120b` | Model used by the `judge` scorer (live mode) |
+| `BIFROST_SETUP_TOKEN` | *(empty)* | Unlocks Bifrost's management API so hosted providers you add on the Models page are registered in the gateway at runtime. Empty = they are called directly. See [models.md](models.md#routes-through-bifrost-or-direct). |
 | `APP_SECRET` | *(generated)* | Encrypts API keys stored for your own model connections. Set it for anything long-lived. See [models.md](models.md#security). |
 | `ALLOW_PRIVATE_ENDPOINTS` | allowed locally, blocked on the public demo | Whether model connections may point at private or loopback addresses |
 | `FRESHNESS_MODEL` / `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-120b` / `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free` | Stale-answer detector's extraction + judge model, then fallbacks on rate limits. See [stale-answer-detection.md](stale-answer-detection.md#configuration). |

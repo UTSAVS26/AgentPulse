@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     much better dated sources than basic). Results are cached per run, so each distinct claim is
     searched once."""
 
+    bifrost_setup_token: str = ""
+    """Bifrost's setup token (``BIFROST_SETUP_TOKEN``, shared with the Bifrost container). Unlocks its
+    management API so hosted providers can be registered at runtime. Empty = hosted connections are
+    called directly."""
+
     app_secret: str = ""
     """Encrypts stored API keys of model connections. If empty, a random secret is generated once and kept
     in ``app_secret_file`` (keys saved under one secret can't be read with another)."""

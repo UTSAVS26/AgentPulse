@@ -144,7 +144,7 @@ Bring your own model: any OpenAI-compatible endpoint. Agents use `custom/<slug>/
 |---|---|---|
 | GET | `/connections/presets` | Known endpoints (Ollama, LM Studio, vLLM, llama.cpp, Jan, OpenAI, Anthropic, Gemini, Mistral…) with base URL and whether a key is needed |
 | GET | `/connections` | Connections: `has_api_key` + `key_hint` (never the key), `models`, `model_ids`, last test result, `agents` using it |
-| POST | `/connections` | Add → `201` (`409` name or slug taken; `422` bad or disallowed URL). Body: `name`, `base_url`, `models`, optional `api_key`, `slug`, `preset`, prices per 1M tokens |
+| POST | `/connections` | Add → `201` (`409` name or slug taken; `422` bad or disallowed URL, unknown provider). Body: `name`, `base_url`, `models`, optional `api_key`, `slug`, `preset`, prices per 1M tokens, and `provider` + `via_bifrost` to register a hosted provider in Bifrost. Response: `route` (`bifrost`/`direct`), `route_reason`, `bifrost_key_status`. |
 | PUT | `/connections/{id}` | Edit (`api_key` null keeps the stored key; `clear_api_key: true` removes it). The slug never changes. |
 | DELETE | `/connections/{id}` | Delete → `204` (`409` while agents use it) |
 | POST | `/connections/test` | Check an unsaved endpoint: list models, and with `model` a one-word chat plus a tool-calling check |

@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 import api
-from ui import page_setup, run_label, show_error
+from ui import page_setup, preview_markdown, run_label, show_error
 
 page_setup("Reports", "📄")
 st.title("📄 Reports")
@@ -60,5 +60,19 @@ st.caption(
 )
 if preview:
     st.markdown("#### Preview")
-    with st.container(border=True):
-        st.markdown(preview)
+    st.caption(
+        "How the Markdown file reads. Wide tables scroll sideways; download the file for the full report."
+    )
+    # Compact, scrollable tables: the report's tables are wider than the page.
+    st.markdown(
+        """<style>
+        .st-key-report_preview table {
+            display: block; overflow-x: auto; max-width: 100%; font-size: 0.85rem;
+        }
+        .st-key-report_preview th, .st-key-report_preview td { white-space: nowrap; padding: 0.35rem 0.7rem; }
+        .st-key-report_preview code { white-space: nowrap; font-size: 0.8rem; }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    with st.container(border=True, height=720, key="report_preview"):
+        st.markdown(preview_markdown(preview))

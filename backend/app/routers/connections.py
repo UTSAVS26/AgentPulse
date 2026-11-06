@@ -17,10 +17,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import crypto, net_guard
+from app import connection_routes, crypto, net_guard
 from app.agents.tools import TOOLS
+from app.clients.bifrost_admin import BUILTIN_PROVIDERS, NATIVE_PROVIDERS
 from app.clients.llm import LLMError, OpenAICompatibleClient
-from app.clients.router import CUSTOM_PREFIX, build_client, custom_model_id
+from app.clients.router import CUSTOM_PREFIX, BifrostRoute, build_client, custom_model_id
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.mode import require_admin
@@ -55,6 +56,9 @@ def _out(db: Session, c: ModelConnection) -> ConnectionOut:
         slug=c.slug,
         kind=c.kind,
         route=c.route,
+        provider=c.provider,
+        route_reason=c.route_reason,
+        bifrost_key_status=c.bifrost_key_status,
         preset=c.preset,
         base_url=c.base_url,
         has_api_key=bool(c.api_key_enc),
@@ -86,6 +90,17 @@ def _checked_url(url: str, settings: Settings) -> net_guard.CheckedURL:
         return net_guard.check(url, settings)
     except net_guard.UnsafeURL as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _kind_and_provider(body) -> tuple[str, str | None]:
+    """``via_bifrost`` + a known provider makes a *hosted* connection (registered in Bifrost if possible)."""
+    provider = (body.provider or "").strip().lower() or None
+    if provider and provider not in NATIVE_PROVIDERS | BUILTIN_PROVIDERS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown provider '{provider}'; known: {sorted(NATIVE_PROVIDERS | BUILTIN_PROVIDERS)}",
+        )
+    return ("hosted" if (body.via_bifrost and provider) else "openai_compatible"), provider
 
 
 def _slugify(name: str) -> str:
@@ -159,7 +174,7 @@ def _test(base_url: str, api_key: str | None, model: str | None, settings: Setti
 # ------------------------------------------------------------------------------------ endpoints
 @router.get("/connections/presets", response_model=list[PresetOut], summary="Known endpoints to start from")
 def list_presets() -> list[dict]:
-    return PRESETS
+    return [{**p, "via_bifrost": p["bifrost_provider"] in NATIVE_PROVIDERS} for p in PRESETS]
 
 
 @router.get("/connections", response_model=list[ConnectionOut], summary="List model connections")
@@ -193,10 +208,12 @@ def create_connection(
     if body.slug and db.scalar(select(ModelConnection.id).where(ModelConnection.slug == body.slug)):
         raise HTTPException(status_code=409, detail=f"slug '{body.slug}' is already used")
     key = (body.api_key or "").strip() or None
+    kind, provider = _kind_and_provider(body)
     conn = ModelConnection(
         name=body.name,
         slug=body.slug or _unique_slug(db, _slugify(body.name)),
-        kind="openai_compatible",
+        kind=kind,
+        provider=provider,
         route="direct",
         preset=body.preset,
         base_url=checked.url,
@@ -207,6 +224,8 @@ def create_connection(
         price_output_per_m=body.price_output_per_m,
     )
     db.add(conn)
+    db.flush()
+    connection_routes.apply(db, conn, settings)
     db.commit()
     db.refresh(conn)
     return _out(db, conn)
@@ -236,6 +255,13 @@ def update_connection(
         conn.api_key_enc, conn.key_hint = None, None
     elif key:
         conn.api_key_enc, conn.key_hint = crypto.encrypt(key), crypto.mask(key)
+    conn.kind, conn.provider = _kind_and_provider(body)
+    was_bifrost = conn.route == "bifrost"
+    connection_routes.apply(db, conn, settings)
+    if was_bifrost and conn.route != "bifrost":
+        conn.route = "bifrost"  # unregister the old key, then record the new route
+        connection_routes.unregister(conn, settings)
+        connection_routes.apply(db, conn, settings)
     conn.updated_at = utcnow()
     db.commit()
     db.refresh(conn)
@@ -253,6 +279,7 @@ def delete_connection(connection_id: int, db: Session = Depends(get_db)) -> Resp
     users = _agents_using(db, conn.slug)
     if users:
         raise HTTPException(status_code=409, detail=f"used by agents {users}: change or delete them first")
+    connection_routes.unregister(conn)
     db.delete(conn)
     db.commit()
     return Response(status_code=204)
@@ -291,7 +318,20 @@ def test_connection(
     except crypto.SecretError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     model = (body.model if body else None) or (conn.models[0] if conn.models else None)
-    result = _test(conn.base_url, key, model, settings, conn.name)
+    if connection_routes.wants_bifrost(conn):
+        connection_routes.apply(db, conn, settings)  # (re)register: Bifrost may have restarted
+    if conn.route == "bifrost":
+        from app.clients import get_bifrost
+
+        slug = conn.slug
+        via = BifrostRoute(get_bifrost(), conn.provider, heal=lambda: connection_routes.reregister(slug))
+        result = {
+            **probe(via, model),
+            "base_url": f"bifrost → {conn.provider}",
+            "hint": conn.bifrost_key_status,
+        }
+    else:
+        result = _test(conn.base_url, key, model, settings, conn.name)
     if result.get("models") is not None:
         conn.discovered_models = result["models"][:500]
     if model and result.get("chat_ok"):

@@ -2,6 +2,36 @@
 
 All notable changes per build phase.
 
+## [v2.3] Hosted providers through Bifrost (runtime registration)
+
+### Added
+- **Hosted connections go through the gateway.** A connection to a provider Bifrost supports natively (OpenAI, Anthropic, Gemini, Mistral, DeepSeek, xAI, Cerebras, Cohere, Perplexity) is **registered in Bifrost at runtime** with the user's key. Calls then take the same path as the built-in models, priced from Bifrost's catalogue.
+  - Models page: *🛰️ Route through the Bifrost gateway* (on by default for those presets).
+  - Each connection shows its route, the reason, and **Bifrost's own key check**.
+- **Route rules**, each with a stored and displayed reason. A connection is called directly when:
+  - it is self-hosted or a custom URL;
+  - it is Groq or OpenRouter (Bifrost load-balances across all keys of a provider, so a user key would mix with the built-in one);
+  - a second connection to the same provider is already routed through Bifrost;
+  - there is no setup token, no config store, or registration failed.
+- **Self-healing:** Bifrost forgets runtime registrations on restart. A call that hits "unknown provider" re-registers and retries once, and testing a connection re-registers it. Deleting a connection, or switching it to direct, removes its key, and the provider too once it has no keys left. `config.json` providers are never touched.
+- `BIFROST_SETUP_TOKEN` (`.env` → Bifrost and backend) unlocks Bifrost's management API. Without it, hosted connections are called directly.
+- API: `provider` and `via_bifrost` on create/update. Responses carry `route_reason` and `bifrost_key_status`. Presets carry `via_bifrost`.
+- New: `clients/bifrost_admin.py`, `connection_routes.py`, a `BifrostRoute` client in the router, and 3 new nullable columns on `model_connections`.
+- Tests: 18 backend tests against a fake Bifrost built from the spike's observed behaviour, and 1 page test. The deploy-image smoke test checks the direct fallback on the cloud image (17 checks).
+
+### Spike (recorded in docs/bifrost.md)
+- The management API needs the setup token (401/403). Runtime providers and keys work without a restart, and keys are validated on add. **Runtime additions are dropped on restart.** It doesn't work without a config store.
+- **Render:** re-enabling only the SQLite config store at 0.1 CPU brought back "database is locked" errors, so Render keeps it disabled and hosted connections are called directly there.
+
+### Found in live testing (and fixed)
+- Real Bifrost returns `"keys": null` for a provider with no keys. The fake in the tests returned `[]`, so saving crashed live. It is now handled (the fake now behaves like the real one), and routing never fails a save: an unexpected error becomes a direct route with the reason.
+
+### Changed
+- **Reports page:** the Markdown preview is a compact, scrollable panel. Headings are shifted down, and wide tables scroll sideways with cells on one line, instead of huge headings and cut-off, wrapped tables (reported from the live Render site).
+
+### Verified live
+- A Gemini connection was registered at runtime and the key check shown. A call went through Bifrost to Google. After a Bifrost restart the next call **self-healed**. Delete cleaned up Bifrost. A Groq user key stayed direct with the reason shown.
+
 ## [v2.2] Bring your own model: OpenAI-compatible connections
 
 ### Added
