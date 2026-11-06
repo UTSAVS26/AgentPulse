@@ -56,6 +56,14 @@ def _show_test(res: dict) -> None:
             st.warning(f"⚠️ {res.get('tools_detail') or 'no tool calling'}: use it for agents without tools.")
     elif res.get("chat_error"):
         st.error(f"❌ `{res['model']}`: {res['chat_error']}")
+        if any(
+            k in res["chat_error"].lower()
+            for k in ("404", "not found", "no longer available", "does not exist")
+        ):
+            st.info(
+                "💡 The provider doesn't know this model name (it may be retired). Click **🔍 Fetch models** "
+                "and pick one from the list your key can use."
+            )
 
 
 # ------------------------------------------------------------------------------------ add
@@ -129,6 +137,11 @@ with st.expander("➕ Add a model connection", expanded=not connections):
         price_in = p1.number_input("USD per 1M input tokens", min_value=0.0, value=0.0, key="new_pin")
         price_out = p2.number_input("USD per 1M output tokens", min_value=0.0, value=0.0, key="new_pout")
         st.caption("Benchmark costs for this connection's models use these prices.")
+    if via_bifrost:
+        st.caption(
+            "ℹ️ Testing before saving calls the provider **directly**. After you save, the key is registered "
+            "in Bifrost and the connection card's **🧪 Test** goes through the gateway."
+        )
     b1, b2 = st.columns(2)
     if b1.button("🧪 Test first model", disabled=locked or not (base_url.strip() and models)):
         res, err = api.post(
