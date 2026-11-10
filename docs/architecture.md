@@ -85,8 +85,11 @@ tasks. Details: [stale-answer-detection.md](stale-answer-detection.md).
 - `app/reports.py` builds a run report from `metrics_payload()` and `execution_rows()` in `routers/runs.py`
   (the same functions behind `/runs/{id}/metrics` and `/runs/{id}/executions`) and renders it as Markdown, CSV
   or JSON (`GET /reports/{id}`).
-- `app/seed/demo.py`: on a database with no runs, startup seeds two mock benchmark runs (on their own thread,
-  so the engine's run workers stay free) and two example freshness checks. See [setup.md](setup.md#demo-data).
+- `app/seed/demo.py`: on a database with no runs, startup seeds two example freshness checks, then, on its own
+  thread (so startup stays fast and the engine's run workers stay free), a mock Freshness Bench run and two
+  mock benchmark runs. See [setup.md](setup.md#demo-data).
+- `app/freshbench/`: the Live Freshness Bench: question generator (Tavily news by age window → writer →
+  validator), background jobs, the knowledge-cutoff curve and the daily pulse. See [freshbench.md](freshbench.md).
 
 ## Data model
 

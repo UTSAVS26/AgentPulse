@@ -205,6 +205,24 @@ Response (abridged, live):
 
 `GET /executions/{id}` includes `freshness_verdict` and `freshness_check_id` (the latest check of that answer).
 
+## Freshness Bench
+
+Generate a benchmark from today's news, follow the job, list snapshots, and read the knowledge-cutoff curve
+of a run. Endpoints and examples: [freshbench.md](freshbench.md#api).
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/freshbench/config` | Categories, age buckets, defaults, pulse status |
+| POST | `/freshbench/generate` | Start a generation job (`202`), or reuse today's snapshot |
+| GET | `/freshbench/jobs`, `/freshbench/jobs/{id}` | Job progress and result summary |
+| GET | `/freshbench/snapshots` | Snapshots with questions per age bucket |
+| GET | `/freshbench/history` | Accuracy per agent across Freshness Bench runs, drift alerts |
+| GET | `/runs/{id}/knowledge-curve` | Accuracy by event age and the estimated knowledge cutoff (`404` for suites without dated questions) |
+
+Tasks accept `event_date` (`YYYY-MM-DD`), `source_url` and `source_title`; suites report `kind`
+(`freshbench` for snapshots, which are read-only) and `snapshot_date`. `GET /runs/{id}/metrics` adds
+`knowledge_curve` (or `null`).
+
 ## Reports
 
 | Method | Path | Description |

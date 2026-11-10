@@ -52,6 +52,7 @@ def render_expected(expected: str, today: date | None = None) -> str:
 
 def normalize(text: str) -> str:
     """NFKC, lowercase, strip markdown/punctuation (keeping decimal points), collapse spaces."""
+    text = re.sub(r"[™®©℠]", " ", text)  # NFKC would turn "Enzara™" into "EnzaraTM", hiding the name
     text = unicodedata.normalize("NFKC", text).lower()
     text = re.sub(r"[*_`#>]", " ", text)
     text = re.sub(r"(?<!\d)\.|\.(?!\d)", " ", text)  # drop periods that aren't decimal points

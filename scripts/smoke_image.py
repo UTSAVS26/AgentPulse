@@ -46,7 +46,14 @@ def main() -> int:
     with urllib.request.urlopen(f"{UI}/_stcore/health", timeout=10) as res:
         check("dashboard health", res.status == 200)
 
-    status, h = call("GET", "/health")
+    for _ in range(120):  # the container is "healthy" once the dashboard is up; wait for the API too
+        try:
+            status, h = call("GET", "/health")
+            break
+        except OSError:
+            time.sleep(1)
+    else:
+        status, h = call("GET", "/health")
     check("backend health ok", status == 200 and h.get("status") == "ok", h)
     check(
         "public demo defaults to mock", h.get("mock_mode") is True and h.get("public_deployment") is True, h
@@ -55,7 +62,8 @@ def main() -> int:
     _, agents = call("GET", "/agents")
     _, suites = call("GET", "/suites")
     check("6 agents seeded", len(agents) == 6, len(agents))
-    check("3 suites seeded", len(suites) == 3, len(suites))
+    builtins = [s["name"] for s in suites if s.get("builtin")]
+    check("3 built-in suites seeded", len(builtins) == 3, [s["name"] for s in suites])
 
     math = next(s for s in suites if s["name"] == "Math & Reasoning")
     status, run = call(
@@ -78,6 +86,21 @@ def main() -> int:
         sum(r["suite_name"] in ("Math & Reasoning", "Current Events (time-sensitive)") for r in runs) >= 3
         and len(checks) >= 2,
         [(r["id"], r["suite_name"], r["status"]) for r in runs],
+    )
+
+    snaps = call("GET", "/freshbench/snapshots")[1]
+    fb_run = next((r for r in runs if r["suite_name"].startswith("Freshness Bench")), None)
+    for _ in range(240):  # the demo bench run executes after the two classic demo runs
+        if fb_run is None or fb_run["status"] not in ("pending", "running"):
+            break
+        time.sleep(1)
+        fb_run = call("GET", f"/runs/{fb_run['id']}")[1]
+    curve = call("GET", f"/runs/{fb_run['id']}/knowledge-curve")[1] if fb_run else {}
+    statuses = sorted((a.get("cutoff") or {}).get("status", "") for a in curve.get("agents", []))
+    check(
+        "Freshness Bench demo: snapshot, run, knowledge curve",
+        bool(snaps) and snaps[0]["questions"] >= 36 and statuses == ["estimated", "no cutoff detected"],
+        {"snapshots": [(x["name"], x["questions"]) for x in snaps], "curve": statuses},
     )
 
     status, fc = call(

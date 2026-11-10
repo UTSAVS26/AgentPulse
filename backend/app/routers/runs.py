@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +13,7 @@ from app.bench.engine import BenchmarkEngine, RunValidationError, get_bench_engi
 from app.bench.metrics import ExecRecord, run_metrics
 from app.connection_routes import describe_models
 from app.db import get_db
+from app.freshbench.curve import knowledge_curve
 from app.mode import Mode, get_mode, require_admin
 from app.models import Agent, BenchmarkRun, Task, TaskExecution, TaskSuite
 from app.schemas import ExecutionOut, RunCreate, RunExecutionOut, RunOut
@@ -161,6 +165,25 @@ def get_run_metrics(run_id: int, db: Session = Depends(get_db)) -> dict:
     return metrics_payload(db, _get_run(db, run_id))
 
 
+_CURVES: OrderedDict[tuple, dict | None] = OrderedDict()  # fits are ~0.3 s per agent: cache per run state
+
+
+def _curve(db: Session, run: BenchmarkRun, records: list, agents: dict, tasks: dict) -> dict | None:
+    """Knowledge-cutoff curve for runs of suites with dated questions (Freshness Bench), else None."""
+    dates = {tid: t["event_date"] for tid, t in tasks.items() if t.get("event_date")}
+    if not dates:
+        return None
+    suite = db.get(TaskSuite, run.suite_id)
+    created = run.created_at.date() if run.created_at else date.today()
+    reference = date.fromisoformat(suite.snapshot_date) if suite and suite.snapshot_date else created
+    key = (run.id, len(records), sum(r.passed for r in records), reference, tuple(sorted(agents)))
+    if key not in _CURVES:
+        _CURVES[key] = knowledge_curve(records, dates, reference, agents, seed=run.id)
+        while len(_CURVES) > 64:
+            _CURVES.popitem(last=False)
+    return _CURVES[key]
+
+
 def metrics_payload(db: Session, run: BenchmarkRun) -> dict:
     """The `/runs/{id}/metrics` body (shared with reports, so both show identical numbers)."""
     run_id = run.id
@@ -169,11 +192,27 @@ def metrics_payload(db: Session, run: BenchmarkRun) -> dict:
         for e in db.scalars(select(TaskExecution).where(TaskExecution.run_id == run_id))
     ]
     agents = _agent_info(db, run.agent_ids)
-    metrics = run_metrics(records, agents, task_lookup(db, run.suite_id), seed=run.id)
+    tasks = task_lookup(db, run.suite_id)
+    metrics = run_metrics(records, agents, tasks, seed=run.id)
+    metrics["knowledge_curve"] = _curve(db, run, records, agents, tasks)
     for row in metrics["leaderboard"]:  # how each agent's model was called (Bifrost or direct)
         info = agents.get(row["agent_id"], {})
         row.update(route=info.get("route"), provider=info.get("provider"), connection=info.get("connection"))
     return {"run": run_out(db, run).model_dump(mode="json"), **metrics}
+
+
+@router.get(
+    "/runs/{run_id}/knowledge-curve",
+    summary="Accuracy vs event age and the estimated knowledge cutoff (runs of dated suites)",
+)
+def run_knowledge_curve(run_id: int, db: Session = Depends(get_db)) -> dict:
+    run = _get_run(db, run_id)
+    curve = metrics_payload(db, run)["knowledge_curve"]
+    if curve is None:
+        raise HTTPException(
+            status_code=404, detail="this run's suite has no dated questions (Freshness Bench)"
+        )
+    return curve
 
 
 @router.post(

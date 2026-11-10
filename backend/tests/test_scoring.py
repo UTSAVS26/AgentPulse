@@ -132,3 +132,11 @@ def test_judge_failures_fall_back_to_contains():
 def test_judge_scorer_without_judge_uses_contains():
     r = s("Rayleigh scattering", "judge", "Rayleigh scattering")
     assert r.passed and "no judge configured" in r.detail
+
+
+@pytest.mark.parametrize(
+    "output", ["It is **Renuvis Enzara™**.", "Enzara® ships now", "© Enzara 2026", "Enzara℠"]
+)
+def test_contains_ignores_trademark_symbols(output):
+    """NFKC turns ™ into the letters TM; the symbol must not glue onto the name."""
+    assert score_output(output, scorer="contains", expected="Enzara").passed

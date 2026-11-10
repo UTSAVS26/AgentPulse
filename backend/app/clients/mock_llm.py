@@ -20,15 +20,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 import re
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
+from app.clients import mock_news
 from app.clients.llm import LLMError, LLMResponse, ToolCall
+from app.clients.mock_freshbench import freshbench_responder
 from app.clients.mock_freshness import freshness_responder
 from app.clients.mock_judge import judge_responder
 
@@ -44,15 +48,18 @@ class ModelProfile:
     failure_rate: float  # probability a call raises a transient provider error
     tool_use: float  # probability of using a tool when one would help
     recovery: float  # probability of retrying a tool after it errors
+    cutoff_days: int = 240  # knowledge cutoff, in days before today (Freshness Bench questions)
 
 
 KNOWN_PROFILES: dict[str, ModelProfile] = {
-    "groq/openai/gpt-oss-120b": ModelProfile(0.92, 550, 150, 1.4, 0.02, 0.95, 0.90),
-    "groq/openai/gpt-oss-20b": ModelProfile(0.82, 480, 120, 1.2, 0.03, 0.90, 0.75),
-    "groq/qwen/qwen3.8-27b": ModelProfile(0.86, 160, 60, 0.9, 0.03, 0.85, 0.70),
-    "openrouter/nvidia/nemotron-3.5-lightning:free": ModelProfile(0.74, 2000, 700, 1.1, 0.08, 0.75, 0.55),
-    "ollama/granite4:3b": ModelProfile(0.58, 900, 300, 0.8, 0.01, 0.60, 0.40),
-    "ollama/qwen3.5:9b": ModelProfile(0.72, 1800, 500, 1.0, 0.01, 0.80, 0.60),
+    "groq/openai/gpt-oss-120b": ModelProfile(0.92, 550, 150, 1.4, 0.02, 0.95, 0.90, 210),
+    "groq/openai/gpt-oss-20b": ModelProfile(0.82, 480, 120, 1.2, 0.03, 0.90, 0.75, 260),
+    "groq/qwen/qwen3.8-27b": ModelProfile(0.86, 160, 60, 0.9, 0.03, 0.85, 0.70, 140),
+    "openrouter/nvidia/nemotron-3.5-lightning:free": ModelProfile(
+        0.74, 2000, 700, 1.1, 0.08, 0.75, 0.55, 110
+    ),
+    "ollama/granite4:3b": ModelProfile(0.58, 900, 300, 0.8, 0.01, 0.60, 0.40, 430),
+    "ollama/qwen3.5:9b": ModelProfile(0.72, 1800, 500, 1.0, 0.01, 0.80, 0.60, 300),
 }
 
 
@@ -70,7 +77,16 @@ def profile_for(model: str) -> ModelProfile:
         failure_rate=round(r.uniform(0.0, 0.06), 3),
         tool_use=round(r.uniform(0.6, 0.95), 2),
         recovery=round(r.uniform(0.4, 0.9), 2),
+        cutoff_days=r.randint(90, 450),
     )
+
+
+def knows_event(profile: ModelProfile, event_date: str, rng: random.Random) -> bool:
+    """Whether a model 'learned' an event: likely if it is older than the cutoff, unlikely if newer
+    (a smooth ~25-day ramp, so the knowledge curve looks like a real one)."""
+    age = (mock_news.today() - date.fromisoformat(event_date)).days
+    p_know = 1 / (1 + math.exp(-(age - profile.cutoff_days) / 25))
+    return rng.random() < p_know
 
 
 _ARITH = re.compile(r"[\d(][\d\s.+\-*/%^()]*[\d)]")
@@ -115,8 +131,14 @@ class MockLLMClient:
         self.latency_scale = latency_scale
         self.answer_key = {_normalize(k): v for k, v in (answer_key or {}).items()}
         self.stale_key: dict[str, str] = {}
-        # The stale-answer detector's prompts are always answered (see mock_freshness).
-        self.responders: list[Responder] = [freshness_responder, judge_responder, *(responders or [])]
+        self.event_dates: dict[str, str] = {}
+        # The detector's, judges' and Freshness Bench generator's prompts are always answered.
+        self.responders: list[Responder] = [
+            freshness_responder,
+            judge_responder,
+            freshbench_responder,
+            *(responders or []),
+        ]
         self.failure_rate_override = failure_rate_override
         self._calls: dict[str, int] = {}
         self._lock = threading.Lock()
@@ -127,6 +149,11 @@ class MockLLMClient:
         with old training data would give)."""
         self.answer_key.update({_normalize(k): v for k, v in answer_key.items()})
         self.stale_key.update({_normalize(k): v for k, v in (stale_key or {}).items()})
+
+    def set_event_dates(self, event_dates: dict[str, str]) -> None:
+        """Register when each question's event happened (Freshness Bench): the model only knows events older
+        than its knowledge cutoff, unless a tool looked them up."""
+        self.event_dates.update({_normalize(k): v for k, v in event_dates.items() if v})
 
     def add_responder(self, responder: Responder) -> None:
         self.responders.append(responder)
@@ -241,6 +268,9 @@ class MockLLMClient:
             None,
         )
         expected = self._lookup_answer(user_prompt)
+        event_date = self.event_dates.get(_normalize(user_prompt))
+        if event_date and not good_tool_result and not knows_event(profile, event_date, rng):
+            return "I don't have information about that event: it may be after my training data.", []
         stale = self.stale_key.get(_normalize(user_prompt))
         if stale and not good_tool_result and rng.random() < 0.85:
             # Time-sensitive question answered from (simulated) training data: confidently outdated.

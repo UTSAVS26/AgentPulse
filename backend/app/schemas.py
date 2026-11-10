@@ -139,6 +139,13 @@ class TaskIn(BaseModel):
     category: str = Field(default="general", max_length=60)
     time_sensitive: bool = False
     stale_answer: str | None = Field(default=None, max_length=1000)
+    event_date: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="Date of the event the question is about (YYYY-MM-DD): drives the knowledge curve.",
+    )
+    source_url: str | None = Field(default=None, max_length=2000)
+    source_title: str | None = Field(default=None, max_length=500)
 
     @field_validator("scorer")
     @classmethod
@@ -208,6 +215,8 @@ class SuiteOut(BaseModel):
     task_count: int
     categories: list[str]
     time_sensitive_count: int
+    kind: str | None = Field(default=None, description="`freshbench` for a Live Freshness Bench snapshot.")
+    snapshot_date: str | None = Field(default=None, description="When a Freshness Bench snapshot was made.")
 
 
 class SuiteDetailOut(SuiteOut):

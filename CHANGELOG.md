@@ -2,6 +2,39 @@
 
 All notable changes per build phase.
 
+## [v3.2] Live Freshness Bench
+
+### Added
+- **Live Freshness Bench** ([docs/freshbench.md](docs/freshbench.md)): a benchmark written from the news on the
+  day you run it. Tavily searches 6 categories × 6 event ages (this week → 2 years ago) with publication-date
+  windows; a model writes one dated question per article; a second call rejects unsupported, ambiguous or
+  guessable ones; local checks drop answers that appear in the question or are just a date. The result is a
+  read-only snapshot suite with each task's event date and source.
+- **Knowledge-cutoff curve:** accuracy per event age with 95% intervals and a logistic fit, giving each agent's
+  *effective knowledge cutoff* with a bootstrap interval ("no cutoff detected" for agents that search the web).
+  In `GET /runs/{id}/metrics` (`knowledge_curve`) and `GET /runs/{id}/knowledge-curve`.
+- **📡 Freshness Bench page:** generate (with progress and rejection counts), browse questions with sources, run
+  agents, read the curve; a **📡 Knowledge cutoff** tab on Compare.
+- **Pulse:** `FRESHBENCH_PULSE_HOUR_UTC` generates and runs the bench every day; history across snapshots with a
+  drift alert (`FRESHBENCH_DRIFT_POINTS`).
+- Mock mode: a fictional dated news corpus (relative to today) and knowledge cutoffs for mock models, so the
+  curve works offline. A fresh deployment's demo data includes a Freshness Bench run.
+- Tasks carry `event_date`, `source_url`, `source_title` (import, export and duplicate keep them); suites carry
+  `kind` and `snapshot_date`.
+
+### Changed
+- Reports moved to page 9 (after the new Freshness Bench page); URLs are unchanged.
+- Home: a Freshness Bench card, and glossary entries for 95% CI, tier, jury, Freshness Bench and knowledge
+  cutoff.
+- The model-fallback loop of the stale-answer detector is shared (`chat_with_fallback`).
+- Demo runs are created on the background seeding thread, so the API starts listening sooner on small
+  instances; the image smoke test waits for the API, not just the dashboard.
+- Backend version 3.2.0.
+
+### Fixed
+- `contains` missed names followed by `™`, `®`, `©` or `℠` (Unicode normalisation turned "Enzara™" into
+  "enzaratm").
+
 ## [v3.1] Statistical rigor and a jury of judges
 
 ### Added

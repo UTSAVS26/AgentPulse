@@ -10,7 +10,7 @@ from app.clients.mock_llm import MockLLMClient
 from app.clients.mock_search import MockSearchClient
 from app.config import Settings
 from app.db import get_sessionmaker
-from app.models import BenchmarkRun, FreshnessCheck, TaskExecution
+from app.models import BenchmarkRun, FreshnessCheck, TaskExecution, TaskSuite
 from app.seed import seed_agents, seed_suites
 from app.seed.demo import seed_demo_data
 
@@ -34,11 +34,14 @@ def test_demo_seed_creates_two_finished_mock_runs_and_checks(db_engine):
         seed_agents(db)
         seed_suites(db)
         ids = seed_demo_data(db, engine, SETTINGS, background=False)
-    assert len(ids) == 2
+    assert len(ids) == 3
     with Session(db_engine) as db:
-        runs = [db.get(BenchmarkRun, i) for i in ids]
+        fb, *runs = [db.get(BenchmarkRun, i) for i in ids]
         assert all(r.status == "done" and r.mock_mode and len(r.agent_ids) == 4 for r in runs)
-        assert db.query(TaskExecution).count() == (8 + 6) * 4 * 2
+        assert fb.status == "done" and fb.mock_mode and len(fb.agent_ids) == 2 and fb.id < runs[0].id
+        suite = db.get(TaskSuite, fb.suite_id)
+        assert suite.kind == "freshbench" and len(suite.tasks) == 72
+        assert db.query(TaskExecution).count() == (8 + 6) * 4 * 2 + 72 * 2
         manual = db.query(FreshnessCheck).filter(FreshnessCheck.source == "text").all()
         assert [c.verdict for c in manual] == ["stale", "stale"]
         assert db.query(FreshnessCheck).filter(FreshnessCheck.source == "benchmark").count() > 0
@@ -50,6 +53,6 @@ def test_demo_seed_is_skipped_when_runs_exist_or_no_agents(db_engine):
         assert seed_demo_data(db, engine, SETTINGS, background=False) == []  # no agents seeded
         seed_agents(db)
         seed_suites(db)
-        assert len(seed_demo_data(db, engine, SETTINGS, background=False)) == 2
+        assert len(seed_demo_data(db, engine, SETTINGS, background=False)) == 3
         assert seed_demo_data(db, engine, SETTINGS, background=False) == []  # runs exist now
-        assert db.query(BenchmarkRun).count() == 2
+        assert db.query(BenchmarkRun).count() == 3
