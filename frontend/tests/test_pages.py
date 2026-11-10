@@ -381,7 +381,7 @@ def test_detector_degrades_when_backend_down(monkeypatch):
 
 # ------------------------------------------------------------------------------------ phase 6: reports
 def test_reports_page_offers_four_downloads_and_previews(freshness_run):
-    at = AppTest.from_file(str(FRONTEND / "pages/8_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/9_Reports.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = freshness_run["id"]
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -399,12 +399,12 @@ def test_reports_page_empty_and_backend_down(monkeypatch):
     monkeypatch.setattr(
         api, "get", lambda path, **kw: ([], None) if path == "/runs" else real_get(path, **kw)
     )
-    at = AppTest.from_file(str(FRONTEND / "pages/8_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/9_Reports.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception and any("No benchmark results yet" in i.value for i in at.info)
     monkeypatch.setattr(api, "get", real_get)
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    at = AppTest.from_file(str(FRONTEND / "pages/8_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/9_Reports.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
@@ -613,8 +613,79 @@ def test_home_explains_every_page():
         "Compare",
         "Traces",
         "Stale-Answer Detector",
+        "Freshness Bench",
         "Reports",
     ):
         assert "#### " in text and page in text, page
-    assert text.count("**What it does:**") == 8 and text.count("**Why:**") == 8
+    assert text.count("**What it does:**") == 9 and text.count("**Why:**") == 9
     assert any("mock mode" in i.value or "live mode" in i.value for i in [*at.info, *at.success])
+
+
+# ------------------------------------------------------------------------------------ v3.2: freshness bench
+def _freshbench_run() -> tuple[int, int, bool]:
+    """Today's mock snapshot (generated if missing) and a finished 2-agent run on it.
+
+    Returns (suite_id, run_id, created_suite)."""
+    import time
+
+    res = requests.post(f"{BACKEND}/freshbench/generate", json={}, timeout=30).json()
+    created = res["job"] is not None
+    if created:
+        for _ in range(240):
+            job = requests.get(f"{BACKEND}/freshbench/jobs/{res['job']['id']}", timeout=10).json()
+            if job["status"] != "running":
+                break
+            time.sleep(0.5)
+        assert job["status"] == "done", job
+        suite_id = job["suite_id"]
+    else:
+        suite_id = res["existing_suite_id"]
+    run = requests.post(
+        f"{BACKEND}/runs",
+        json={
+            "suite_id": suite_id,
+            "agent_ids": [2, 4],
+            "repeats": 1,
+            "fault_rate": 0,
+            "check_freshness": False,
+        },
+        timeout=30,
+    ).json()
+    for _ in range(600):
+        status = requests.get(f"{BACKEND}/runs/{run['id']}", timeout=10).json()["status"]
+        if status not in ("pending", "running"):
+            break
+        time.sleep(0.5)
+    return suite_id, run["id"], created
+
+
+def test_freshness_bench_page_generate_and_knowledge_curve():
+    at = app("pages/8_Freshness_Bench.py")
+    assert any(b.label == "📡 Generate today's bench" for b in at.button)
+    suite_id, run_id, created = _freshbench_run()
+    try:
+        at = AppTest.from_file(str(FRONTEND / "pages/8_Freshness_Bench.py"), default_timeout=TIMEOUT)
+        at.session_state["fb_suite"] = suite_id
+        at.session_state["fb_run"] = run_id
+        at.run()
+        assert not at.exception, [e.value for e in at.exception]
+        assert {m.label for m in at.metric} >= {"≤ 7 days", "1–2 years"}
+        assert any("Effective knowledge cutoff" in c.value for c in at.caption)
+        assert len(at.dataframe) >= 2  # questions + cutoff table
+
+        cmp = AppTest.from_file(str(FRONTEND / "pages/5_Compare.py"), default_timeout=TIMEOUT)
+        cmp.session_state["run_id"] = run_id
+        cmp.run()
+        assert not cmp.exception, [e.value for e in cmp.exception]
+        assert any(t.label == "📡 Knowledge cutoff" for t in cmp.tabs)
+
+        suites = AppTest.from_file(str(FRONTEND / "pages/3_Suites.py"), default_timeout=TIMEOUT)
+        suites.query_params["suite"] = str(suite_id)
+        suites.run()
+        assert not suites.exception, [e.value for e in suites.exception]
+        assert any("Freshness Bench snapshot: read-only" in i.value for i in suites.info)
+        assert not any(b.label.startswith("💾 Save changes") for b in suites.button)
+    finally:
+        requests.delete(f"{BACKEND}/runs/{run_id}", timeout=10)
+        if created:
+            requests.delete(f"{BACKEND}/suites/{suite_id}", timeout=10)

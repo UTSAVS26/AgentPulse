@@ -43,6 +43,10 @@ class TaskSuite(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     builtin: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=False)
     """Seeded from ``seed/suites/*.yaml``: read-only through the API (duplicate to edit)."""
+    kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """``freshbench``: a Live Freshness Bench snapshot (read-only so results stay reproducible)."""
+    snapshot_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    """``YYYY-MM-DD`` a Freshness Bench snapshot was generated: event ages are measured from it."""
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     tasks: Mapped[list[Task]] = relationship(
@@ -65,6 +69,10 @@ class Task(Base):
     stale_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     """What an out-of-date model typically answers (e.g. a previous office holder). Used by the
     mock LLM to simulate stale knowledge, and as a hint for stale-answer detection."""
+    event_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    """``YYYY-MM-DD`` of the event the question is about (Freshness Bench): drives the knowledge curve."""
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_title: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     suite: Mapped[TaskSuite] = relationship(back_populates="tasks")
 

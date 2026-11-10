@@ -70,6 +70,8 @@ class SearchClient(Protocol):
         topic: Topic = "general",
         search_depth: Depth = "basic",
         include_answer: bool = True,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> SearchResponse: ...
 
     def ping(self) -> tuple[bool, str]: ...
@@ -129,7 +131,10 @@ class TavilySearchClient:
         topic: Topic = "general",
         search_depth: Depth = "basic",
         include_answer: bool = True,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> SearchResponse:
+        """``start_date``/``end_date`` (``YYYY-MM-DD``) limit results to that publication window."""
         if not self.api_key:
             raise SearchError("TAVILY_API_KEY is not set", retryable=False)
         payload = {
@@ -139,6 +144,10 @@ class TavilySearchClient:
             "search_depth": search_depth,
             "include_answer": include_answer,
         }
+        if start_date:
+            payload["start_date"] = start_date
+        if end_date:
+            payload["end_date"] = end_date
         headers = {"Authorization": f"Bearer {self.api_key}"}
         started = time.perf_counter()
         try:

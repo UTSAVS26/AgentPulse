@@ -63,6 +63,34 @@ class Settings(BaseSettings):
         extra = [m.strip() for m in self.freshness_fallback_models.split(",") if m.strip()]
         return list(dict.fromkeys([self.freshness_model, *extra]))
 
+    freshbench_per_cell: int = 2
+    """Live Freshness Bench: questions per category × age bucket (6 × 6 cells → up to 72 questions)."""
+
+    freshbench_pulse_hour_utc: int | None = None
+    """Pulse: generate today's Freshness Bench and run it every day at this UTC hour (unset = off).
+    Live mode spends Tavily credits (one basic search per cell) and model calls."""
+
+    freshbench_pulse_agents: str = "2,4"
+    """Agent ids the pulse runs (default: GPT-OSS 120B with and without tools)."""
+
+    freshbench_drift_points: float = 10.0
+    """Alert when an agent's Freshness Bench accuracy drops by more than this many points."""
+
+    @field_validator("freshbench_pulse_hour_utc", mode="before")
+    @classmethod
+    def _pulse_hour(cls, v: object) -> object:
+        """Empty (compose passes "" when unset), "off" or "none" turn the pulse off; otherwise 0–23."""
+        if v is None or (isinstance(v, str) and v.strip().lower() in ("", "off", "none", "false")):
+            return None
+        hour = int(v)
+        if not 0 <= hour <= 23:
+            raise ValueError("FRESHBENCH_PULSE_HOUR_UTC must be an hour from 0 to 23 (or empty for off)")
+        return hour
+
+    @property
+    def pulse_agent_ids(self) -> list[int]:
+        return [int(x) for x in self.freshbench_pulse_agents.split(",") if x.strip().isdigit()]
+
     freshness_search_depth: str = "advanced"
     """Tavily depth for the automatic checks during benchmark runs (advanced = 2 credits per search,
     much better dated sources than basic). Results are cached per run, so each distinct claim is

@@ -58,6 +58,8 @@ def _summary(db: Session, suite: TaskSuite) -> dict:
         "task_count": len(suite.tasks),
         "categories": sorted({t.category for t in suite.tasks}),
         "time_sensitive_count": sum(t.time_sensitive for t in suite.tasks),
+        "kind": suite.kind,
+        "snapshot_date": suite.snapshot_date,
     }
 
 
@@ -82,11 +84,17 @@ def _get_suite(db: Session, suite_id: int) -> TaskSuite:
     return suite
 
 
-def _editable(db: Session, suite_id: int) -> TaskSuite:
+def _editable(db: Session, suite_id: int, *, deleting: bool = False) -> TaskSuite:
     suite = _get_suite(db, suite_id)
     if suite.builtin:
         raise HTTPException(
             status_code=403, detail=f"'{suite.name}' is a built-in suite and read-only: duplicate it to edit"
+        )
+    if suite.kind == "freshbench" and not deleting:
+        raise HTTPException(
+            status_code=403,
+            detail=f"'{suite.name}' is a Freshness Bench snapshot and read-only (so results stay "
+            "reproducible): duplicate it to edit",
         )
     return suite
 
@@ -191,7 +199,7 @@ def duplicate_suite(suite_id: int, name: str | None = None, db: Session = Depend
     summary="Delete a custom suite (only if it has no runs)",
 )
 def delete_suite(suite_id: int, db: Session = Depends(get_db)) -> Response:
-    suite = _editable(db, suite_id)
+    suite = _editable(db, suite_id, deleting=True)
     runs = _run_count(db, suite_id)
     if runs:
         raise HTTPException(status_code=409, detail=f"suite has {runs} benchmark runs; delete them first")
@@ -219,7 +227,10 @@ def update_task(suite_id: int, task_id: int, body: TaskIn, db: Session = Depends
     task = _get_task(suite, task_id)
     if any(t.key == body.key and t.id != task_id for t in suite.tasks):
         raise HTTPException(status_code=409, detail=f"task key '{body.key}' already exists in this suite")
+    keep_if_unset = {"event_date", "source_url", "source_title"}  # the dashboard table doesn't send them
     for field, value in body.model_dump().items():
+        if field in keep_if_unset and field not in body.model_fields_set:
+            continue
         setattr(task, field, value)
     db.commit()
     db.refresh(task)

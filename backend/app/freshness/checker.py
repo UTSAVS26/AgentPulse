@@ -244,6 +244,51 @@ _cooldowns = _Cooldowns()
 
 
 # ------------------------------------------------------------------------------------ checker
+def chat_with_fallback(
+    llm: LLMClient,
+    models: list[str],
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+    *,
+    retry_backoff_s: float = 0.5,
+    rate_limit_backoff_s: float = 2.0,
+) -> str:
+    """Ask ``models`` in order (rate-limited ones benched, see ``_cooldowns``) and return the first reply.
+
+    Transient errors are retried; a model that spends its whole budget thinking (empty reply) hands over to
+    the next; if every model is per-minute limited, wait the limit out (up to a full minute) and try again.
+    """
+    last: LLMError | None = None
+    for round_ in range(6):  # waits 2+4+8+16+30 s: covers a full per-minute window
+        minute_limited = False
+        for model in _cooldowns.order(llm, models):
+            if round_ and _cooldowns.out_for_the_day(llm, model):
+                continue
+            for attempt in range(3):
+                try:
+                    res = llm.chat(model, messages, temperature=0.0, max_tokens=max_tokens)
+                    if not (res.content or "").strip() and res.finish_reason == "length":
+                        # a reasoning model spent the whole budget thinking: try the next model
+                        raise LLMError(
+                            "empty reply (token budget used up)", retryable=False, kind="truncated"
+                        )
+                    return res.content
+                except LLMError as exc:
+                    last = exc
+                    if exc.kind == "rate_limited":
+                        minute_limited |= not _cooldowns.mark(llm, model, exc)
+                        break  # next model: don't hammer a rate-limited one
+                    if not exc.retryable or attempt == 2:
+                        break
+                    time.sleep(retry_backoff_s * (2**attempt))
+        if not minute_limited:
+            break
+        time.sleep(min(30.0, rate_limit_backoff_s * (2**round_)))  # wait out a per-minute limit
+    if last is None:
+        raise LLMError("no model available", retryable=False, kind="unavailable")
+    raise last
+
+
 class FreshnessChecker:
     """Checks texts for stale claims. Thread-safe; optionally caches results (use one checker per
     benchmark run so identical answers are verified once)."""
@@ -381,34 +426,14 @@ class FreshnessChecker:
             {"role": "system", "content": system},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
-        last: LLMError | None = None
-        for round_ in range(6):  # waits 2+4+8+16+30 s: covers a full per-minute window
-            minute_limited = False
-            for model in _cooldowns.order(self.llm, self.models):
-                if round_ and _cooldowns.out_for_the_day(self.llm, model):
-                    continue
-                for attempt in range(3):
-                    try:
-                        res = self.llm.chat(model, messages, temperature=0.0, max_tokens=max_tokens)
-                        if not (res.content or "").strip() and res.finish_reason == "length":
-                            # a reasoning model spent the whole budget thinking: try the next model
-                            raise LLMError(
-                                "empty reply (token budget used up)", retryable=False, kind="truncated"
-                            )
-                        return res.content
-                    except LLMError as exc:
-                        last = exc
-                        if exc.kind == "rate_limited":
-                            minute_limited |= not _cooldowns.mark(self.llm, model, exc)
-                            break  # next model: don't hammer a rate-limited one
-                        if not exc.retryable or attempt == 2:
-                            break
-                        time.sleep(self.retry_backoff_s * (2**attempt))
-            if not minute_limited:
-                break
-            time.sleep(min(30.0, self.rate_limit_backoff_s * (2**round_)))  # wait out a per-minute limit
-        assert last is not None
-        raise last
+        return chat_with_fallback(
+            self.llm,
+            self.models,
+            messages,
+            max_tokens,
+            retry_backoff_s=self.retry_backoff_s,
+            rate_limit_backoff_s=self.rate_limit_backoff_s,
+        )
 
     def _extract_llm(self, text: str, question: str | None) -> list[ClaimCheck]:
         payload: dict[str, Any] = {"today": self.today.isoformat(), "text": text}

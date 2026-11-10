@@ -217,3 +217,90 @@ def test_reliability_bars_show_confidence_intervals():
     labels = {a.y: (a.text, a.x) for a in fig.layout.annotations}
     assert labels["A"][0] == "80%" and labels["A"][1] == pytest.approx(0.915)  # past the whisker
     assert "95% CI" in fig.data[0].hovertemplate and fig.data[0].customdata[1][3] == "60–90%"
+
+
+def _curve():
+    buckets = [
+        {"key": k, "label": lab, "min_days": lo, "max_days": hi}
+        for k, lab, lo, hi in (
+            ("week", "≤ 7 days", 0, 7),
+            ("month", "8–30 days", 8, 30),
+            ("quarter", "1–3 months", 31, 91),
+            ("half", "3–6 months", 92, 182),
+            ("year", "6–12 months", 183, 365),
+            ("older", "1–2 years", 366, 730),
+        )
+    ]
+
+    def agent(aid, accs, cutoff):
+        return {
+            "agent_id": aid,
+            "agent_name": f"Agent {aid}",
+            "buckets": [
+                {
+                    **b,
+                    "mid_days": (b["min_days"] + b["max_days"]) / 2,
+                    "accuracy": a,
+                    "ci": [max(0, a - 0.1), min(1, a + 0.1)],
+                    "attempts": 12,
+                    "tasks": 12,
+                }
+                for b, a in zip(buckets, accs, strict=True)
+            ],
+            "cutoff": cutoff,
+            "fit": [
+                {"age_days": d, "accuracy": 0.9 / (1 + 2.718 ** (-(d - 200) / 20))} for d in range(0, 731, 15)
+            ],
+        }
+
+    return {
+        "buckets": buckets,
+        "agents": [
+            agent(
+                1,
+                [0.0, 0.0, 0.1, 0.2, 0.8, 0.9],
+                {
+                    "status": "estimated",
+                    "days_before_snapshot": 200,
+                    "date": "2026-04-24",
+                    "ci": ["2026-03-01", "2026-05-20"],
+                    "plateau": 0.9,
+                },
+            ),
+            agent(2, [1.0, 0.9, 1.0, 0.9, 1.0, 0.9], {"status": "no cutoff detected", "plateau": 0.95}),
+        ],
+    }
+
+
+def test_knowledge_curve_spaces_buckets_evenly_with_today_on_the_right():
+    fig = charts.knowledge_curve(_curve(), charts.agent_colors([1, 2]))
+    axis = fig.layout.xaxis
+    assert (
+        list(axis.tickvals) == [0, 1, 2, 3, 4, 5]
+        and axis.ticktext[0] == "1–2 years"
+        and axis.ticktext[-1] == "≤ 7 days"
+    )
+    names = [t.name for t in fig.data if t.showlegend is not False]
+    assert names == ["Agent 1", "Agent 2"]
+    assert fig.data[0].mode == "markers" and fig.data[2].mode == "lines+markers"  # fitted vs flat
+    assert any("cutoff ≈ 2026-04" in a.text for a in fig.layout.annotations)
+    assert charts._age_position(0, [3.5, 19, 61, 137, 274, 548]) == 5.0
+    assert charts._age_position(800, [3.5, 19, 61, 137, 274, 548]) == 0.0
+    assert charts._age_position(274, [3.5, 19, 61, 137, 274, 548]) == pytest.approx(1.0)
+
+
+def test_freshbench_history_one_line_per_agent():
+    hist = {
+        "agents": [
+            {
+                "agent_id": 1,
+                "agent_name": "A",
+                "points": [
+                    {"snapshot_date": "2026-11-09", "accuracy": 0.8, "suite_name": "FB", "run_id": 1},
+                    {"snapshot_date": "2026-11-10", "accuracy": 0.6, "suite_name": "FB", "run_id": 2},
+                ],
+            }
+        ]
+    }
+    fig = charts.freshbench_history(hist, {1: charts.SERIES[0]})
+    assert len(fig.data) == 1 and list(fig.data[0].y) == [0.8, 0.6]

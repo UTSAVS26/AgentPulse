@@ -13,6 +13,7 @@ import random
 import time
 from dataclasses import dataclass
 
+from app.clients import mock_news
 from app.clients.search import Depth, SearchError, SearchResponse, SearchResult, Topic
 
 
@@ -157,6 +158,8 @@ class MockSearchClient:
         topic: Topic = "general",
         search_depth: Depth = "basic",
         include_answer: bool = True,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> SearchResponse:
         rng = random.Random(hashlib.sha256(f"{self.seed}|{query}".encode()).hexdigest())
         latency_ms = rng.uniform(300, 1200) * (2 if search_depth == "advanced" else 1)
@@ -165,8 +168,21 @@ class MockSearchClient:
         if rng.random() < self.failure_rate:
             raise SearchError("simulated Tavily outage (mock)", retryable=True, status_code=503)
 
-        entry = find_entry(query)
-        if entry:
+        today = mock_news.today()
+        if start_date or end_date:  # Freshness Bench generation: dated news inside the window
+            items = mock_news.search_window(query, start_date, end_date, today)
+            rng.shuffle(items)
+            return SearchResponse(
+                query=query,
+                results=[_news_result(it, 0.9 - i * 0.05) for i, it in enumerate(items[:max_results])],
+                latency_ms=latency_ms,
+            )
+        news = mock_news.find_item(query, today)
+        entry = None if news else find_entry(query)
+        if news:  # an agent looking up a Freshness Bench question
+            results = [_news_result(news, 0.92)]
+            answer = f"{news.content} (simulated news, {news.published})"
+        elif entry:
             results = [
                 SearchResult(
                     title=title,
@@ -196,6 +212,16 @@ class MockSearchClient:
             results=results[:max_results],
             latency_ms=latency_ms,
         )
+
+
+def _news_result(item: mock_news.NewsItem, score: float) -> SearchResult:
+    return SearchResult(
+        title=item.title,
+        url=item.url,
+        content=item.content,
+        score=round(score, 2),
+        published_date=item.published,
+    )
 
 
 def _slug(text: str) -> str:

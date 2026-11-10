@@ -32,6 +32,7 @@ cp .env.example .env
 | `ALLOW_PRIVATE_ENDPOINTS` | allowed locally, blocked on the public demo | Whether model connections may point at private or loopback addresses |
 | `FRESHNESS_MODEL` / `FRESHNESS_FALLBACK_MODELS` | `openrouter/anthropic/claude-sonnet-5.5` / `groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b,openrouter/nvidia/nemotron-3.5-lightning:free` | Stale-answer detector's extraction + judge model, then fallbacks on rate limits. See [stale-answer-detection.md](stale-answer-detection.md#configuration). |
 | `FRESHNESS_SEARCH_DEPTH` | `advanced` | Tavily depth for automatic checks during benchmark runs |
+| `FRESHBENCH_PER_CELL` / `FRESHBENCH_PULSE_HOUR_UTC` / `FRESHBENCH_PULSE_AGENTS` / `FRESHBENCH_DRIFT_POINTS` | `2` / off / `2,4` / `10` | Live Freshness Bench: questions per category × age cell, the optional daily pulse and its drift alert. See [freshbench.md](freshbench.md#settings). |
 
 Provider keys are read **only by Bifrost** (see `bifrost/config.json`, which uses `env.` references). The backend never sees them.
 
@@ -151,6 +152,8 @@ On a database with **no runs** (first start, or after `make reset`), the backend
 
 - two mock benchmark runs in the background, Math & Reasoning and Current Events, each with 4 agents ×
   2 repeats and 20% tool faults; they finish in about a minute;
+- a mock **Freshness Bench** snapshot (fictional dated news) run by GPT-OSS 120B with and without tools, so the
+  knowledge-cutoff curve is on the 📡 Freshness Bench page; it runs after the other two;
 - two example stale-answer checks (Detector → History).
 
 Every page has content on first open. The demo runs are always **mock** (labelled so everywhere), cost

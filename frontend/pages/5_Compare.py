@@ -97,8 +97,10 @@ if jury:
             j3.success("The jurors agreed on every answer.")
 
 has_freshness = any(r.get("freshness_checked") for r in board)
+curve = data.get("knowledge_curve")
 tab_names = ["Overview", "Speed & cost", "Per task", "Failures & recovery"]
-tabs = st.tabs(tab_names + (["🕰️ Freshness"] if has_freshness else []))
+extra = (["🕰️ Freshness"] if has_freshness else []) + (["📡 Knowledge cutoff"] if curve else [])
+tabs = st.tabs(tab_names + extra)
 tab_overview, tab_cost, tab_tasks, tab_failures = tabs[:4]
 CHART_CFG = {"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]}
 
@@ -278,3 +280,25 @@ if has_freshness:
                 )
             else:
                 st.success("No stale answers in this run.")
+
+if curve:
+    with tabs[-1]:
+        st.caption(
+            "This run's questions are about dated events (a **Freshness Bench**). Accuracy by how long "
+            "ago the event happened shows what each agent *knows* versus what it can *look up*. Details "
+            "and the run history: **📡 Freshness Bench** page."
+        )
+        st.plotly_chart(charts.knowledge_curve(curve, colors), use_container_width=True, config=CHART_CFG)
+        for a in curve["agents"]:
+            c = a["cutoff"] or {}
+            if c.get("status") == "estimated":
+                st.markdown(
+                    f"**{a['agent_name']}**: effective knowledge cutoff ≈ **{c['date'][:7]}** "
+                    f"(95% CI {c['ci'][0][:7]} – {c['ci'][1][:7]}), "
+                    f"{pct(c['plateau'])} right on older events."
+                )
+            else:
+                st.markdown(
+                    f"**{a['agent_name']}**: {c.get('status', 'n/a')}"
+                    + (f": {c['detail']}" if c.get("detail") else ".")
+                )

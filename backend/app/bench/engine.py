@@ -171,6 +171,7 @@ class BenchmarkEngine:
                     "tolerance": t.tolerance,
                     "stale_answer": t.stale_answer,
                     "time_sensitive": t.time_sensitive,
+                    "event_date": t.event_date,
                 }
                 for t in db.get(TaskSuite, run.suite_id).tasks
             ]
@@ -231,6 +232,7 @@ class BenchmarkEngine:
                 {t["prompt"]: render_expected(t["expected"]).split("|")[0] for t in tasks},
                 {t["prompt"]: t["stale_answer"] for t in tasks if t["stale_answer"]},
             )
+            llm.set_event_dates({t["prompt"]: t["event_date"] for t in tasks if t.get("event_date")})
 
     def _judge(self, ctx: _RunContext) -> Callable[[str, str, str], ScoreResult] | None:
         if not ctx.live:
@@ -386,6 +388,12 @@ def get_bench_engine() -> BenchmarkEngine:
 
 def task_lookup(db: Session, suite_id: int) -> dict[int, dict]:
     return {
-        t.id: {"key": t.key, "category": t.category, "time_sensitive": t.time_sensitive, "prompt": t.prompt}
+        t.id: {
+            "key": t.key,
+            "category": t.category,
+            "time_sensitive": t.time_sensitive,
+            "prompt": t.prompt,
+            "event_date": t.event_date,
+        }
         for t in db.scalars(select(Task).where(Task.suite_id == suite_id).order_by(Task.id))
     }

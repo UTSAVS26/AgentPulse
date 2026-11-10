@@ -56,6 +56,11 @@ services:
       FRESHNESS_MODEL: ${FRESHNESS_MODEL:-openrouter/anthropic/claude-sonnet-5.5}
       FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b,openrouter/nvidia/nemotron-3.5-lightning:free}
       FRESHNESS_SEARCH_DEPTH: ${FRESHNESS_SEARCH_DEPTH:-advanced}
+      # Live Freshness Bench (docs/freshbench.md): questions per cell, optional daily pulse, drift alert
+      FRESHBENCH_PER_CELL: ${FRESHBENCH_PER_CELL:-2}
+      FRESHBENCH_PULSE_HOUR_UTC: ${FRESHBENCH_PULSE_HOUR_UTC:-}
+      FRESHBENCH_PULSE_AGENTS: ${FRESHBENCH_PULSE_AGENTS:-2,4}
+      FRESHBENCH_DRIFT_POINTS: ${FRESHBENCH_DRIFT_POINTS:-10}
       # Model connections: encryption secret for stored API keys (generated into the volume if empty),
       # and "localhost" in a connection URL means your machine, not the container.
       APP_SECRET: ${APP_SECRET:-}

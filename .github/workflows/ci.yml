@@ -90,7 +90,7 @@ jobs:
       - name: Seeded data present
         run: |
           curl -sf localhost:8000/agents | python3 -c "import json,sys; n=len(json.load(sys.stdin)); assert n==6, n; print(n, 'agents')"
-          curl -sf localhost:8000/suites | python3 -c "import json,sys; s=json.load(sys.stdin); assert len(s)==3, s; print([x['name'] for x in s])"
+          curl -sf localhost:8000/suites | python3 -c "import json,sys; s=[x['name'] for x in json.load(sys.stdin) if x['builtin']]; assert len(s)==3, s; print(s)"
       - name: Dashboard tests against the running stack (make ui-test)
         run: make ui-test
       - name: Container logs must not contain tracebacks

@@ -134,7 +134,16 @@ PAGES = [
         "AI models learn from old data and confidently repeat facts that are no longer true.",
     ),
     (
-        "pages/8_Reports.py",
+        "pages/8_Freshness_Bench.py",
+        "📡",
+        "Freshness Bench",
+        "A test written from today's news: questions about events from this week back to two years ago, each "
+        "with its source. Run agents on it and see how their accuracy drops for newer events.",
+        "It can't be memorised, and it shows each model's real *knowledge cutoff*: the point after which it "
+        "stops knowing what happened, unless it searches the web.",
+    ),
+    (
+        "pages/9_Reports.py",
         "📄",
         "Reports",
         "Download a benchmark as a readable report (Markdown), a spreadsheet (CSV) or raw data (JSON), with "
@@ -170,6 +179,10 @@ with st.expander("📖 The words used in this app"):
 | **p50 / p95 latency** | Typical / slowest-5% time to answer. |
 | **Stale answer** | Was true once but isn't any more (e.g. a former office holder). |
 | **Freshness** | Share of an answer's time-sensitive facts that are still current. |
+| **95% CI / Tier** | The range a score is likely in / agents whose gap could be luck share a tier. |
+| **Jury** | Several judge models from different AI labs vote on whether an answer is right. |
+| **Freshness Bench** | Questions about real news events of different ages, made fresh each day. |
+| **Knowledge cutoff** | Roughly when a model stopped learning: later events need a web search. |
 | **Mock / live mode** | Simulated models and search (free, offline) / real ones. |
 | **Bifrost / Tavily** | The gateway every model call goes through / the live web search for fact checks. |
 """

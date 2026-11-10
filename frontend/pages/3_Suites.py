@@ -92,7 +92,8 @@ suite_id = st.selectbox(
     ids,
     index=ids.index(current) if current in ids else 0,
     format_func=lambda i: (
-        f"{'🔒 ' if by_id[i]['builtin'] else '✏️ '}{by_id[i]['name']} · {by_id[i]['task_count']} tasks"
+        f"{'🔒 ' if by_id[i]['builtin'] else ('📡 ' if by_id[i].get('kind') == 'freshbench' else '✏️ ')}"
+        f"{by_id[i]['name']} · {by_id[i]['task_count']} tasks"
         + (f" · {by_id[i]['time_sensitive_count']} ⏰" if by_id[i]["time_sensitive_count"] else "")
         + (f" · {by_id[i]['runs']} runs" if by_id[i]["runs"] else "")
     ),
@@ -101,7 +102,8 @@ _select(suite_id)
 suite, err = api.get(f"/suites/{suite_id}")
 if show_error(err):
     st.stop()
-builtin = suite["builtin"]
+snapshot = suite.get("kind") == "freshbench"
+builtin = suite["builtin"] or snapshot  # tasks are read-only
 
 c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
 c1.markdown(f"### {suite['name']}")
@@ -111,7 +113,12 @@ c2.metric("Tasks", suite["task_count"])
 c3.metric("Time-sensitive", suite["time_sensitive_count"])
 c4.metric("Runs", suite["runs"])
 
-if builtin:
+if snapshot:
+    st.info(
+        "📡 Freshness Bench snapshot: read-only, so its results stay reproducible. Duplicate it to get an "
+        "editable copy, or open the **Freshness Bench** page to run it and see each agent's knowledge cutoff."
+    )
+elif builtin:
     st.info("🔒 Built-in suite: read-only. Duplicate it to get an editable copy.")
 a1, a2, a3, a4 = st.columns(4)
 if a1.button("📄 Duplicate", help="Copy this suite (and its tasks) into a new editable suite."):
@@ -131,15 +138,16 @@ for col, fmt in ((a2, "yaml"), (a3, "csv")):
 nav_link(a4, "pages/4_Run_Benchmark.py", "Run this suite", "🏁")
 
 # ------------------------------------------------------------------------------------ settings
-if not builtin:
+if not suite["builtin"]:
     with st.expander("⚙️ Suite settings"):
-        with st.form("suite_settings"):
-            new_name = st.text_input("Name", value=suite["name"], max_chars=120)
-            new_desc = st.text_area("Description", value=suite["description"], height=70)
-            if st.form_submit_button("Save"):
-                _, err = api.put(f"/suites/{suite_id}", json={"name": new_name, "description": new_desc})
-                if not show_error(err):
-                    st.rerun()
+        if not snapshot:
+            with st.form("suite_settings"):
+                new_name = st.text_input("Name", value=suite["name"], max_chars=120)
+                new_desc = st.text_area("Description", value=suite["description"], height=70)
+                if st.form_submit_button("Save"):
+                    _, err = api.put(f"/suites/{suite_id}", json={"name": new_name, "description": new_desc})
+                    if not show_error(err):
+                        st.rerun()
         if suite["runs"]:
             st.caption(
                 f"This suite has {suite['runs']} runs, so it can't be deleted (delete the runs first)."

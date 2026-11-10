@@ -521,3 +521,125 @@ def trace_timeline(trace: list[dict]) -> go.Figure:
     fig.update_xaxes(ticksuffix=" s", rangemode="tozero")
     fig.update_yaxes(autorange="reversed", showgrid=False, tickfont={"color": INK_2, "size": 11})
     return fig
+
+
+# ------------------------------------------------------------------------------------ freshness bench
+MAX_CURVE_AGENTS = 4
+
+
+def _age_position(age: float, mids: list[float]) -> float:
+    """Map an event age (days) to the evenly spaced bucket axis: oldest bucket at 0, newest at len-1.
+
+    ``mids`` are the bucket midpoints from newest to oldest; ages between them interpolate linearly."""
+    n = len(mids)
+    if age <= mids[0]:
+        return n - 1.0
+    if age >= mids[-1]:
+        return 0.0
+    for i in range(n - 1):
+        lo, hi = mids[i], mids[i + 1]
+        if lo <= age <= hi:
+            return (n - 1) - (i + (age - lo) / (hi - lo))
+    return 0.0
+
+
+def knowledge_curve(curve: dict, colors: dict[int, str]) -> go.Figure:
+    """Accuracy per event-age bucket (95% Wilson bars) with the fitted logistic and the estimated cutoff.
+
+    Buckets are evenly spaced, oldest on the left and *today on the right*, so a model's knowledge visibly
+    fades toward the present. The fitted curve and the cutoff line are mapped onto the same axis.
+    """
+    fig = go.Figure()
+    buckets = curve["buckets"]
+    mids = [(b["min_days"] + b["max_days"]) / 2 for b in buckets]
+    n = len(buckets)
+    estimated = 0
+    for row in curve["agents"][:MAX_CURVE_AGENTS]:
+        color = colors.get(row["agent_id"], OTHER)
+        pts = [(i, b) for i, b in enumerate(row["buckets"]) if b["accuracy"] is not None]
+        cutoff = row.get("cutoff") or {}
+        fitted = cutoff.get("status") == "estimated" and row.get("fit")
+        fig.add_trace(
+            go.Scatter(
+                x=[n - 1 - i for i, _ in pts],
+                y=[b["accuracy"] for _, b in pts],
+                mode="markers" if fitted else "lines+markers",
+                name=row["agent_name"],
+                legendgroup=str(row["agent_id"]),
+                marker={"size": 9, "color": color, "line": {"width": 2, "color": "#0e1117"}},
+                line={"width": 2, "color": color},
+                error_y={
+                    "type": "data",
+                    "symmetric": False,
+                    "array": [b["ci"][1] - b["accuracy"] if b["ci"] else 0 for _, b in pts],
+                    "arrayminus": [b["accuracy"] - b["ci"][0] if b["ci"] else 0 for _, b in pts],
+                    "color": color,
+                    "thickness": 1.5,
+                    "width": 4,
+                },
+                customdata=[[b["label"], b["attempts"], b["tasks"]] for _, b in pts],
+                hovertemplate="<b>%{fullData.name}</b><br>Events %{customdata[0]} old<br>"
+                "Accuracy %{y:.0%} (%{customdata[1]} answers, %{customdata[2]} questions)<extra></extra>",
+            )
+        )
+        if fitted:
+            fig.add_trace(
+                go.Scatter(
+                    x=[_age_position(p["age_days"], mids) for p in row["fit"]],
+                    y=[p["accuracy"] for p in row["fit"]],
+                    mode="lines",
+                    line={"width": 2, "color": color, "dash": "dot"},
+                    legendgroup=str(row["agent_id"]),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+            x = _age_position(cutoff["days_before_snapshot"], mids)
+            fig.add_vline(x=x, line={"width": 1, "dash": "dash", "color": color})
+            fig.add_annotation(
+                x=x,
+                y=1.0 + 0.08 * (estimated + 1),
+                yref="paper",
+                text=f"cutoff ≈ {cutoff['date'][:7]}",
+                showarrow=False,
+                font={"size": 11, "color": color},
+                xanchor="center",
+            )
+            estimated += 1
+    _layout(fig, "Accuracy by event age (today on the right)", height=420)
+    fig.update_layout(margin={"l": 8, "r": 16, "t": 48 + 22 * max(estimated, 1), "b": 8})
+    fig.update_xaxes(
+        range=[-0.4, n - 0.6],
+        tickvals=list(range(n)),
+        ticktext=[b["label"] for b in reversed(buckets)],
+        title={"text": "How long ago the event happened", "font": {"color": MUTED, "size": 12}},
+        showgrid=False,
+    )
+    fig.update_yaxes(range=[-0.03, 1.05], tickformat=".0%", title=None)
+    return fig
+
+
+def freshbench_history(history: dict, colors: dict[int, str]) -> go.Figure:
+    """Accuracy per agent across Freshness Bench snapshots (one point per run)."""
+    fig = go.Figure()
+    for row in history["agents"][: len(SERIES)]:
+        pts = [p for p in row["points"] if p["accuracy"] is not None]
+        if not pts:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=[p["snapshot_date"] for p in pts],
+                y=[p["accuracy"] for p in pts],
+                mode="lines+markers",
+                name=row["agent_name"],
+                marker={"size": 8, "color": colors.get(row["agent_id"], OTHER)},
+                line={"width": 2, "color": colors.get(row["agent_id"], OTHER)},
+                customdata=[[p["suite_name"], p["run_id"]] for p in pts],
+                hovertemplate="<b>%{fullData.name}</b><br>%{customdata[0]} (run #%{customdata[1]})<br>"
+                "Accuracy %{y:.0%}<extra></extra>",
+            )
+        )
+    _layout(fig, "Freshness Bench accuracy over time", height=320)
+    fig.update_yaxes(range=[0, 1.05], tickformat=".0%")
+    fig.update_xaxes(type="category", showgrid=False)
+    return fig
