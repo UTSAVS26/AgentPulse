@@ -381,7 +381,7 @@ def test_detector_degrades_when_backend_down(monkeypatch):
 
 # ------------------------------------------------------------------------------------ phase 6: reports
 def test_reports_page_offers_four_downloads_and_previews(freshness_run):
-    at = AppTest.from_file(str(FRONTEND / "pages/9_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/10_Reports.py"), default_timeout=TIMEOUT)
     at.session_state["run_id"] = freshness_run["id"]
     at.run()
     assert not at.exception, [e.value for e in at.exception]
@@ -399,12 +399,12 @@ def test_reports_page_empty_and_backend_down(monkeypatch):
     monkeypatch.setattr(
         api, "get", lambda path, **kw: ([], None) if path == "/runs" else real_get(path, **kw)
     )
-    at = AppTest.from_file(str(FRONTEND / "pages/9_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/10_Reports.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception and any("No benchmark results yet" in i.value for i in at.info)
     monkeypatch.setattr(api, "get", real_get)
     monkeypatch.setattr(api, "BACKEND_URL", "http://127.0.0.1:9")
-    at = AppTest.from_file(str(FRONTEND / "pages/9_Reports.py"), default_timeout=TIMEOUT)
+    at = AppTest.from_file(str(FRONTEND / "pages/10_Reports.py"), default_timeout=TIMEOUT)
     at.run()
     assert not at.exception
     assert any("Cannot reach the backend" in e.value for e in [*at.error, *at.sidebar.error])
@@ -614,10 +614,11 @@ def test_home_explains_every_page():
         "Traces",
         "Stale-Answer Detector",
         "Freshness Bench",
+        "Freshness Guard",
         "Reports",
     ):
         assert "#### " in text and page in text, page
-    assert text.count("**What it does:**") == 9 and text.count("**Why:**") == 9
+    assert text.count("**What it does:**") == 10 and text.count("**Why:**") == 10
     assert any("mock mode" in i.value or "live mode" in i.value for i in [*at.info, *at.success])
 
 
@@ -689,3 +690,47 @@ def test_freshness_bench_page_generate_and_knowledge_curve():
         requests.delete(f"{BACKEND}/runs/{run_id}", timeout=10)
         if created:
             requests.delete(f"{BACKEND}/suites/{suite_id}", timeout=10)
+
+
+# ------------------------------------------------------------------------------------ v3.3: freshness guard
+def test_freshness_guard_page_sends_a_question_through_the_guard():
+    at = app("pages/9_Freshness_Guard.py")
+    assert any(b.label == "🛡️ Send through the Guard" for b in at.button)
+    next(r for r in at.radio if r.label == "Guard mode").set_value("block").run()
+    next(b for b in at.button if b.label == "🛡️ Send through the Guard").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    report = [*at.success, *at.warning, *at.error, *at.info]
+    assert any("freshness" in r.value or "Not checked" in r.value for r in report), [r.value for r in report]
+    assert any(m.value.startswith("**What your app receives**") for m in at.markdown)
+
+
+def test_guard_api_speaks_openai():
+    res = requests.post(
+        f"{BACKEND}/guard/v1/chat/completions",
+        json={"model": "groq/openai/gpt-oss-20b", "messages": [{"role": "user", "content": "Write a haiku"}]},
+        timeout=60,
+    )
+    body = res.json()
+    assert res.ok and body["object"] == "chat.completion" and body["agentpulse"]["checked"] is False
+    assert res.headers["X-AgentPulse-Action"] == "skipped"
+    models = requests.get(f"{BACKEND}/guard/v1/models", timeout=30).json()
+    assert models["object"] == "list" and models["data"]
+
+
+def test_detector_opens_a_linked_guard_check_not_another_one():
+    """Regression: a check hidden from History (e.g. Guard) linked via ?check=<id> showed another one."""
+    res = requests.post(
+        f"{BACKEND}/guard/v1/chat/completions",
+        json={
+            "model": "groq/openai/gpt-oss-20b",
+            "messages": [{"role": "user", "content": "Who is the current UK prime minister?"}],
+        },
+        timeout=120,
+    ).json()
+    check_id = res["agentpulse"].get("check_id")
+    assert check_id, res["agentpulse"]
+    at = AppTest.from_file(str(FRONTEND / "pages/7_Stale_Answer_Detector.py"), default_timeout=TIMEOUT)
+    at.query_params["check"] = str(check_id)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert next(s for s in at.selectbox if s.label == "Check").value == check_id

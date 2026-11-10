@@ -113,10 +113,16 @@ elif source == "An agent's answer":
         linked_check = str(previous[0]["id"])
 
 else:  # history
-    show_auto = st.checkbox("Include automatic checks from benchmark runs")
+    show_auto = st.checkbox("Include automatic checks (benchmark runs and the Freshness Guard)")
     history, err = api.get("/freshness/checks", params={"limit": 100, "manual_only": not show_auto})
     if show_error(err):
         st.stop()
+    history = history or []
+    if linked_check and linked_check.isdigit() and int(linked_check) not in {h["id"] for h in history}:
+        # a link to a check the list filters out (e.g. from the Guard page): show that check, not another one
+        linked, _ = api.get(f"/freshness/checks/{linked_check}")
+        if linked:
+            history.insert(0, linked)
     if not history:
         st.info("No checks yet. Paste a text on the first tab.")
         st.stop()

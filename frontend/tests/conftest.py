@@ -30,7 +30,7 @@ def _get(path: str):
 def clean_up_test_data():
     runs = _get("/runs?limit=200") or []
     watermark = max((r["id"] for r in runs), default=0)
-    checks = _get("/freshness/checks?manual_only=true&limit=200") or []
+    checks = _get("/freshness/checks?limit=200") or []
     check_watermark = max((c["id"] for c in checks), default=0)
     yield
     for run in _get("/runs?limit=200") or []:
@@ -42,8 +42,10 @@ def clean_up_test_data():
     for suite in _get("/suites") or []:
         if not suite["builtin"] and suite["name"].startswith(TEST_SUITES):
             requests.delete(f"{BACKEND}/suites/{suite['id']}", timeout=10)
-    for check in _get("/freshness/checks?manual_only=true&limit=200") or []:
-        if check["id"] > check_watermark:  # detector checks the tests ran (keeps your History clean)
+    for check in _get("/freshness/checks?limit=200") or []:
+        if (
+            check["id"] > check_watermark
+        ):  # detector, Guard and run checks the tests made (keeps History clean)
             requests.delete(f"{BACKEND}/freshness/checks/{check['id']}", timeout=10)
     for conn in _get("/connections") or []:
         if conn["name"].startswith(TEST_CONNECTIONS) and not conn["agents"]:

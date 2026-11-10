@@ -173,7 +173,13 @@ class FreshnessCheck(Base):
     verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)  # see checker.CHECK_VERDICTS
     extraction: Mapped[str | None] = mapped_column(String(80), nullable=True)  # llm | heuristic (...)
     mock_mode: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # text | execution | benchmark
+    source: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # text | execution | benchmark | guard
+    model: Mapped[str | None] = mapped_column(String(200), nullable=True)  # guard: the model that answered
+    guard_action: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )  # guard: annotated|corrected|blocked
     latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="done")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

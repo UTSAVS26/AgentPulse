@@ -143,7 +143,16 @@ PAGES = [
         "stops knowing what happened, unless it searches the web.",
     ),
     (
-        "pages/9_Reports.py",
+        "pages/9_Freshness_Guard.py",
+        "🛡️",
+        "Freshness Guard",
+        "Put AgentPulse between your app and its AI model. It checks every answer's facts against today's "
+        "news and flags, corrects or blocks the outdated ones. Apps connect by changing one setting (the API "
+        "address), because it speaks the standard OpenAI API.",
+        "So the people using your app never get yesterday's facts presented as today's.",
+    ),
+    (
+        "pages/10_Reports.py",
         "📄",
         "Reports",
         "Download a benchmark as a readable report (Markdown), a spreadsheet (CSV) or raw data (JSON), with "
@@ -182,6 +191,7 @@ with st.expander("📖 The words used in this app"):
 | **95% CI / Tier** | The range a score is likely in / agents whose gap could be luck share a tier. |
 | **Jury** | Several judge models from different AI labs vote on whether an answer is right. |
 | **Freshness Bench** | Questions about real news events of different ages, made fresh each day. |
+| **Freshness Guard** | A checkpoint between an app and its model that fact-checks answers for users. |
 | **Knowledge cutoff** | Roughly when a model stopped learning: later events need a web search. |
 | **Mock / live mode** | Simulated models and search (free, offline) / real ones. |
 | **Bifrost / Tavily** | The gateway every model call goes through / the live web search for fact checks. |

@@ -181,7 +181,10 @@ def heuristic_claims(text: str, question: str | None = None, max_claims: int = 8
     sentences = [s for s in split_sentences(text) if is_factual(s)]
     if question and sentences and len(sentences) <= 2 and len(text) <= 300:
         answer = strip_filler(" ".join(sentences))
-        claim = f"{answer} (answer to: {question.strip()})"
+        # A bare answer ("Keir Starmer.") needs its question to mean anything; a full sentence that already
+        # says what it is about ("The current UK PM is Rishi Sunak.") reads better on its own.
+        stands_alone = len(answer.split()) >= 6 and bool(temporal_signals(answer))
+        claim = answer if stands_alone else f"{answer} (answer to: {question.strip()})"
         signals = temporal_signals(f"{question} {answer}")
         return [
             HeuristicClaim(

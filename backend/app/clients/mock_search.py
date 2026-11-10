@@ -26,6 +26,8 @@ class CorpusEntry:
     """Terms that make a claim on this topic *current* (used by the mock fact-checker)."""
     stale_terms: tuple[str, ...] = ()
     """Terms that make a claim *outdated*: what an older model would say."""
+    stale_answer: str = ""
+    """A typical answer from a model with old training data (mock chat answers, Freshness Guard demo)."""
 
     def matches(self, text: str) -> bool:
         lower = text.lower()
@@ -58,6 +60,7 @@ CORPUS: tuple[CorpusEntry, ...] = (
         ),
         current_terms=("burnham",),
         stale_terms=("starmer", "sunak", "truss", "boris johnson", "theresa may"),
+        stale_answer="The current UK Prime Minister is Rishi Sunak, leader of the Conservative Party.",
     ),
     CorpusEntry(
         keywords=("world cup",),
@@ -76,6 +79,7 @@ CORPUS: tuple[CorpusEntry, ...] = (
         ),
         current_terms=("spain",),
         stale_terms=("argentina", "france", "germany"),
+        stale_answer="Argentina won the latest FIFA World Cup, beating France on penalties in the final.",
     ),
     CorpusEntry(
         keywords=("python",),
@@ -94,6 +98,7 @@ CORPUS: tuple[CorpusEntry, ...] = (
         ),
         current_terms=("3.15",),
         stale_terms=("3.14", "3.13", "3.12", "3.11"),
+        stale_answer="The latest stable version of Python is Python 3.13.",
     ),
     CorpusEntry(
         keywords=("secretary-general", "secretary general"),
@@ -133,6 +138,17 @@ CORPUS: tuple[CorpusEntry, ...] = (
         results=(("Boiling point of water", "At standard atmospheric pressure water boils at 100 °C.", ""),),
     ),
 )
+
+
+def mock_fact_answer(prompt: str, stale_probability: float, rng: random.Random) -> str | None:
+    """A mock model's answer to a question on a corpus topic: outdated with ``stale_probability`` (as from old
+    training data), otherwise current. None for other prompts."""
+    entry = find_entry(prompt)
+    if entry is None:
+        return None
+    if entry.stale_answer and rng.random() < stale_probability:
+        return entry.stale_answer
+    return entry.answer
 
 
 def find_entry(text: str) -> CorpusEntry | None:

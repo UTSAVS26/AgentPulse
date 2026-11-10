@@ -2,6 +2,34 @@
 
 All notable changes per build phase.
 
+## [v3.3] Freshness Guard
+
+### Added
+- **Freshness Guard** ([docs/guard.md](docs/guard.md)): `POST /guard/v1/chat/completions` and
+  `GET /guard/v1/models`, OpenAI-compatible. Any OpenAI SDK, LangChain app or chat UI points its base URL at
+  AgentPulse; each answer is forwarded from the model (Bifrost or a model connection), checked by the
+  stale-answer detector against live Tavily sources, then **annotated**, **corrected** (rewritten from the dated
+  sources with citations; a dated correction note if no model can rewrite) or **blocked** (a warning with
+  what's true now). Mode via `X-AgentPulse-Guard` or a `guard` body field.
+- Responses carry an `agentpulse` report (verdict, freshness, claims with dated sources, the original answer
+  when changed) and `X-AgentPulse-*` headers. Streaming (`stream: true`) returns OpenAI chunks with the report
+  in the last one; tool calls pass through; answers with nothing time-sensitive skip the check.
+- On the public demo the API key is the access code (`mock` or none = mock mode); locally it is ignored.
+- `GET /guard/stats` (per model: checked, flagged, corrected, blocked); guard checks are saved with the model and
+  action (`source: guard`); `GET /freshness/checks?source=…`.
+- **🛡️ Freshness Guard page:** try a question in each mode, the one-line SDK setup, guarded traffic per model.
+- `scripts/guard_demo.py`: the three modes with the plain OpenAI SDK. The OpenAI SDK is a dev dependency; the
+  tests drive the proxy with it.
+- Mock mode: simulated models answer the demo topics from "old training data" (more often the older their
+  knowledge cutoff), so the Guard has stale answers to catch offline.
+
+### Changed
+- Reports moved to page 10 (after the new Freshness Guard page); URLs are unchanged.
+- Rule-based claims keep their question as context only for bare answers ("Keir Starmer."); a full sentence
+  stands alone.
+- The Stale-Answer Detector's History hides Guard calls (they have their own page).
+- Backend version 3.3.0.
+
 ## [v3.2] Live Freshness Bench
 
 ### Added

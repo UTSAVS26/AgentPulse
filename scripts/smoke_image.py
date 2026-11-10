@@ -161,6 +161,33 @@ def main() -> int:
         (status, h.get("route"), h.get("route_reason")),
     )
 
+    guard_body = {
+        "model": "groq/openai/gpt-oss-20b",
+        "messages": [{"role": "user", "content": "Who is the current UK prime minister?"}],
+        "guard": "block",
+    }
+    status, g = call("POST", "/guard/v1/chat/completions", guard_body)
+    info = g.get("agentpulse", {})
+    check(
+        "Freshness Guard (mock, OpenAI format): checked, report attached",
+        status == 200
+        and g.get("object") == "chat.completion"
+        and info.get("checked")
+        and info.get("mode") == "mock",
+        (status, info),
+    )
+    req = urllib.request.Request(
+        f"{API}/guard/v1/chat/completions", method="POST", data=json.dumps(guard_body).encode()
+    )
+    req.add_header("content-type", "application/json")
+    req.add_header("Authorization", "Bearer wrong-key")
+    try:
+        urllib.request.urlopen(req, timeout=30)
+        bad = (200, {})
+    except urllib.error.HTTPError as exc:
+        bad = (exc.code, json.loads(exc.read() or b"{}"))
+    check("Guard: wrong API key -> 401 (OpenAI error)", bad[0] == 401 and "error" in bad[1], bad)
+
     check("wrong access code -> 401", call("GET", "/health", code="nope")[0] == 401)
     status, live = call("GET", "/health", code=CODE)
     check("right access code -> live mode", status == 200 and live.get("mock_mode") is False, live)

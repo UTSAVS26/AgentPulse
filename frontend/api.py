@@ -51,8 +51,11 @@ def _request(method: str, path: str, **kwargs: Any) -> tuple[Any | None, str | N
 
 def _format_error(res: requests.Response) -> str:
     try:
-        detail = res.json().get("detail", res.text)
-    except ValueError:
+        body = res.json()
+        detail = (
+            body.get("detail") or (body.get("error") or {}).get("message") or res.text
+        )  # FastAPI / OpenAI
+    except (ValueError, AttributeError):
         detail = res.text
     if isinstance(detail, list):  # FastAPI validation errors
         detail = "; ".join(
