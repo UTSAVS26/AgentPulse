@@ -37,6 +37,22 @@ if health:
         )
 
 # ------------------------------------------------------------------------------------ how to use it
+# cards in one row get the same height (only inside the keyed containers below)
+st.markdown(
+    "<style>"
+    + ", ".join(
+        f".st-key-{key} [data-testid='stColumn'] > div{tail}"
+        for key in ("home_steps", "home_pages")
+        for tail in (
+            "",
+            " > div",
+            " > div > [data-testid='stVerticalBlock']",
+            " > div > [data-testid='stVerticalBlock'] > [data-testid='stVerticalBlockBorderWrapper']",
+        )
+    )
+    + " { height: 100%; }</style>",
+    unsafe_allow_html=True,
+)
 st.markdown("### How to use it")
 steps = [
     ("🔌", "Pick models", "Use the built-in ones, or add your own on **Models**."),
@@ -46,11 +62,12 @@ steps = [
     ("📊", "Read the results", "Who won and why: **Compare**, **Traces**, **Reports**."),
     ("🕰️", "Check freshness", "Is an answer outdated? **Stale-Answer Detector**."),
 ]
-cols = st.columns(len(steps))
-for i, (col, (icon, title, text)) in enumerate(zip(cols, steps, strict=True), start=1):
-    with col.container(border=True):
-        st.markdown(f"**{i}. {icon} {title}**")
-        st.caption(text)
+with st.container(key="home_steps"):
+    cols = st.columns(len(steps))
+    for i, (col, (icon, title, text)) in enumerate(zip(cols, steps, strict=True), start=1):
+        with col.container(border=True):
+            st.markdown(f"**{i}. {icon} {title}**")
+            st.caption(text)
 st.caption(
     "New here? Everything already has example data: open **Compare** to see a finished benchmark right away."
 )
@@ -125,14 +142,15 @@ PAGES = [
         "To share results with your team or keep a record.",
     ),
 ]
-for row_start in range(0, len(PAGES), 2):
-    cols = st.columns(2)
-    for col, (path, icon, name, what, why) in zip(cols, PAGES[row_start : row_start + 2], strict=False):
-        with col.container(border=True):
-            st.markdown(f"#### {icon} {name}")
-            st.markdown(f"**What it does:** {what}")
-            st.markdown(f"**Why:** {why}")
-            nav_link(st, path, f"Open {name}", icon)
+with st.container(key="home_pages"):
+    for row_start in range(0, len(PAGES), 2):
+        cols = st.columns(2)
+        for col, (path, icon, name, what, why) in zip(cols, PAGES[row_start : row_start + 2], strict=False):
+            with col.container(border=True):
+                st.markdown(f"#### {icon} {name}")
+                st.markdown(f"**What it does:** {what}")
+                st.markdown(f"**Why:** {why}")
+                nav_link(st, path, f"Open {name}", icon)
 
 # ------------------------------------------------------------------------------------ glossary
 with st.expander("📖 The words used in this app"):

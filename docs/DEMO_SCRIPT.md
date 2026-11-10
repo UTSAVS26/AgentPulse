@@ -13,8 +13,8 @@ or network. Steps 4b and 6b show the **live** extras when keys and quota are ava
 | Detector live | Detector → paste "The current UK PM is Rishi Sunak." | ⚠️ Outdated with dated news sources |
 | Public URL (if presenting the deployment) | open https://agentpulse-9551.onrender.com about 2 minutes early | the free instance spins down when idle; the first load takes ~1 min |
 
-Groq's free tier allows ~200k tokens/day **per model**. Don't benchmark heavily on demo day. If presenting
-live, set `FRESHNESS_MODEL` to a model no agent in your live run uses (see
+Groq's free tier allows ~200k tokens/day **per model**. Don't benchmark heavily on demo day. The detector and
+judges default to OpenRouter models no agent uses, so they don't share the agents' quotas (see
 [stale-answer-detection.md](stale-answer-detection.md#quota-planning-for-a-live-demo)).
 
 Browser zoom 90%, dark theme, one tab per page you'll show.

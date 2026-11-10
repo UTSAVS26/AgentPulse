@@ -149,8 +149,8 @@ parsing, offline:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `FRESHNESS_MODEL` | `groq/openai/gpt-oss-120b` | Extraction and judge model (live) |
-| `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free` | Tried in order when rate-limited or failing |
+| `FRESHNESS_MODEL` | `openrouter/anthropic/claude-sonnet-5.5` | Extraction and judge model (live), deliberately not one of the benchmarked agents' models |
+| `FRESHNESS_FALLBACK_MODELS` | `groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b,openrouter/nvidia/nemotron-3.5-lightning:free` | Tried in order when rate-limited or failing |
 | `FRESHNESS_SEARCH_DEPTH` | `advanced` | Tavily depth for automatic checks in runs (advanced = 2 credits, much better dated sources; basic = 1) |
 | `TAVILY_API_KEY` | | Required for live verification |
 
@@ -158,11 +158,12 @@ On-demand checks (API and UI) default to `advanced`; the request can ask for `ba
 
 ### Quota planning for a live demo
 
-Groq's free tier allows about **200k tokens per day per model**, and the benchmarked agents use the same
-quotas as the checker. A full live run of 6 agents × 6 tasks × 3 repeats, plus the checks, can exhaust a model
-for the day. Before a demo:
+Groq's free tier allows about **200k tokens per day per model**. A full live run of 6 agents × 6 tasks × 3
+repeats can exhaust a model for the day. The checker's default model (Claude Sonnet 5.5 via OpenRouter) is
+deliberately one **no agent uses**, so the checks don't eat the agents' quotas, and it is a stronger judge
+(paid, a few hundred tokens per claim; the Groq and free fallbacks take over if it fails). Before a demo:
 
-- point `FRESHNESS_MODEL` at a model **no agent in the run uses**;
+- if you change `FRESHNESS_MODEL`, keep it on a model no agent in the run uses;
 - keep runs small (1–2 repeats);
 - remember that each distinct claim costs about 2 Tavily credits (1,000 free per month).
 

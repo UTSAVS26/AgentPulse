@@ -200,6 +200,24 @@ class OpenAICompatibleClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
     ) -> LLMResponse:
+        try:
+            return self._chat_once(model, messages, tools, temperature, max_tokens)
+        except LLMError as exc:
+            budget = affordable_budget(exc, max_tokens)
+            if budget is None:
+                raise
+            # Low prepaid balance: the provider reserves credit for the whole max_tokens up front and
+            # names what it can afford. A judge verdict needs ~200 tokens, so retry once within budget.
+            return self._chat_once(model, messages, tools, temperature, budget)
+
+    def _chat_once(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        temperature: float,
+        max_tokens: int | None,
+    ) -> LLMResponse:
         payload: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature}
         if tools:
             payload["tools"] = tools
@@ -216,7 +234,9 @@ class OpenAICompatibleClient:
             ) from exc
         except httpx.HTTPError as exc:
             raise LLMError(
-                self._scrub(f"cannot reach {self.label}: {exc}"), retryable=True, kind="connection"
+                self._scrub(f"cannot reach {self.label}: {describe_http_error(exc)}"),
+                retryable=True,
+                kind="connection",
             ) from exc
         latency_ms = (time.perf_counter() - started) * 1000
 
@@ -247,8 +267,9 @@ class OpenAICompatibleClient:
             res.raise_for_status()
             return sorted(m["id"] for m in res.json().get("data", []) if "id" in m)
         except (httpx.HTTPError, ValueError, KeyError, AttributeError, TypeError) as exc:
+            reason = describe_http_error(exc) if isinstance(exc, httpx.HTTPError) else exc
             raise LLMError(
-                self._scrub(f"could not list models: {exc}"), retryable=True, kind="list_models"
+                self._scrub(f"could not list models: {reason}"), retryable=True, kind="list_models"
             ) from exc
 
     def ping(self) -> tuple[bool, str]:
@@ -257,6 +278,39 @@ class OpenAICompatibleClient:
         except httpx.HTTPError as exc:
             return False, f"unreachable: {type(exc).__name__}"
         return (True, "ok") if res.status_code == 200 else (False, f"HTTP {res.status_code}")
+
+
+AFFORD_RE = re.compile(r"can only afford (\d+)", re.IGNORECASE)
+MIN_AFFORDABLE_TOKENS = 128
+
+
+def affordable_budget(exc: LLMError, requested: int | None) -> int | None:
+    """A smaller ``max_tokens`` to retry with after "402 … can only afford N" (OpenRouter), else None."""
+    if exc.status_code != 402:
+        return None
+    match = AFFORD_RE.search(str(exc))
+    if not match:
+        return None
+    budget = int(int(match.group(1)) * 0.9)  # margin: the prompt is billed too
+    if budget < MIN_AFFORDABLE_TOKENS or (requested is not None and budget >= requested):
+        return None
+    return budget
+
+
+def describe_http_error(exc: Exception) -> str:
+    """Plain-language reason for a failed request. A server that isn't running often surfaces as the *last*
+    address tried (e.g. Docker's unroutable IPv6 → "Network is unreachable"), which misleads users."""
+    text = str(exc)
+    low = text.lower()
+    if isinstance(exc, httpx.ConnectError):
+        if any(k in low for k in ("refused", "unreachable", "errno 111", "errno 101", "errno 61", "10061")):
+            return "nothing is answering at this address. Is the server running and listening on this port?"
+        dns = ("name or service", "nodename", "getaddrinfo", "name resolution", "errno -2")
+        if any(k in low for k in dns):
+            return "unknown host name. Check the base URL."
+        if "ssl" in low or "certificate" in low:
+            return f"TLS/certificate error ({text})"
+    return text or type(exc).__name__
 
 
 class BifrostClient(OpenAICompatibleClient):

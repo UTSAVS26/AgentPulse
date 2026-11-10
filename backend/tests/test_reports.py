@@ -79,6 +79,7 @@ def test_markdown_report_sections_and_values(api, db_engine):
         f"# AgentPulse benchmark report: run #{rid}",
         "## Highlights",
         "## Leaderboard",
+        "## Is the ranking real?",
         "## Reliability detail",
         "## Accuracy by category",
         "## Pass rate per task",
@@ -100,6 +101,8 @@ def test_csv_reports(api, db_engine):
     board = api.get(f"/runs/{rid}/metrics").json()["leaderboard"]
     assert [row["Agent"] for row in lb] == [r["agent_name"] for r in board]
     assert float(lb[0]["Accuracy"]) == pytest.approx(board[0]["accuracy"])
+    assert lb[0]["Tier"] == "1" and float(lb[0]["Reliability CI low"]) <= float(lb[0]["Reliability"])
+    assert float(lb[0]["Accuracy CI low"]) <= float(lb[0]["Accuracy"]) <= float(lb[0]["Accuracy CI high"])
     assert lb[0]["Freshness"] == ""  # no time-sensitive tasks
     res = api.get(f"/reports/{rid}", params={"format": "csv", "table": "executions"})
     assert f'agentpulse-run-{rid}-executions.csv"' in res.headers["content-disposition"]

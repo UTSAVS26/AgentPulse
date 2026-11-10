@@ -28,7 +28,12 @@ LEADERBOARD_COLUMNS = [
     ("route", "Route"),
     ("connection", "Connection"),
     ("reliability_score", "Reliability"),
+    ("reliability_ci_low", "Reliability CI low"),
+    ("reliability_ci_high", "Reliability CI high"),
+    ("tier", "Tier"),
     ("accuracy", "Accuracy"),
+    ("accuracy_ci_low", "Accuracy CI low"),
+    ("accuracy_ci_high", "Accuracy CI high"),
     ("consistency", "Consistency"),
     ("pass_at_k", "pass@k"),
     ("pass_all_k", "pass-all-k"),
@@ -74,7 +79,16 @@ EXECUTION_COLUMNS = [
     "recovered",
     "freshness_score",
     "freshness_verdict",
+    "jury_votes",
 ]
+
+
+def _jury_votes_text(votes: list[dict] | None) -> str | None:
+    """'claude-opus-5.5=pass; gemini-3.1-pro-preview=fail; …' for the executions CSV."""
+    if not votes:
+        return None
+    verdict = lambda v: "error" if v.get("error") else ("pass" if v.get("passed") else "fail")  # noqa: E731
+    return "; ".join(f"{str(v.get('model', '?')).split('/')[-1]}={verdict(v)}" for v in votes)
 
 
 # ------------------------------------------------------------------------------------ data
@@ -84,6 +98,7 @@ def build_report(db: Session, run: BenchmarkRun) -> dict[str, Any]:
     executions = [e.model_dump(mode="json") for e in execution_rows(db, run)]
     for e in executions:
         e["score_detail"] = (e.get("score_detail") or "").split(" · price:")[0]
+        e["jury_votes"] = _jury_votes_text(e.get("jury"))
     board = [r for r in metrics["leaderboard"] if r["executions"]]
     return {
         "report_version": REPORT_VERSION,
@@ -91,6 +106,8 @@ def build_report(db: Session, run: BenchmarkRun) -> dict[str, Any]:
         "agentpulse_version": __version__,
         "run": metrics["run"],
         "weights": metrics["weights"],
+        "statistics": metrics.get("statistics"),
+        "jury": metrics.get("jury"),
         "highlights": _highlights(board),
         "leaderboard": metrics["leaderboard"],
         "task_matrix": metrics["task_matrix"],
@@ -263,7 +280,8 @@ def to_markdown(report: dict[str, Any]) -> str:
                 "Agent",
                 "Model",
                 "Route",
-                "Reliability",
+                "Reliability (95% CI)",
+                "Tier",
                 "Accuracy",
                 "Consistency",
                 "Recovery",
@@ -278,7 +296,8 @@ def to_markdown(report: dict[str, Any]) -> str:
                     r["agent_name"],
                     f"`{r['model']}`",
                     route_label(r.get("route"), r.get("connection")),
-                    _pct(r["reliability_score"]),
+                    _pct(r["reliability_score"]) + _ci(r.get("reliability_ci")),
+                    _tier(r),
                     _pct(r["accuracy"]),
                     _pct(r["consistency"]),
                     _pct(r["recovery_rate"]),
@@ -296,6 +315,7 @@ def to_markdown(report: dict[str, Any]) -> str:
         f"Reliability = {weights}. Undefined components (consistency with 1 repeat, recovery when nothing "
         "failed) are dropped and the weights renormalised. Formulas: docs/metrics.md.",
         "",
+        *_statistics_md(report),
         "## Reliability detail",
         "",
         _table(
@@ -439,6 +459,52 @@ def to_markdown(report: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
+def _ci(ci: list[float] | None) -> str:
+    return f" ({ci[0] * 100:.0f}–{ci[1] * 100:.0f})" if ci else ""
+
+
+def _tier(row: dict) -> str:
+    if not row.get("tier"):
+        return "–"
+    return f"{row['tier']} (tie)" if row.get("tied_with") else str(row["tier"])
+
+
+def _statistics_md(report: dict[str, Any]) -> list[str]:
+    st = report.get("statistics") or {}
+    out = ["## Is the ranking real?", ""]
+    if st.get("power_note"):
+        out += [st["power_note"], ""]
+    comparisons = st.get("comparisons") or []
+    if comparisons:
+        out.append(
+            "Each agent is compared with the leader of its tier (paired task-level bootstrap; "
+            "same tier = not significantly different, p ≥ 0.05):"
+        )
+        out.append("")
+        for c in comparisons:
+            p = "–" if c["p"] is None else f"p = {c['p']:.3f}"
+            verdict = "significantly better" if c["significant"] else "not significantly different"
+            out.append(f"- **{_cell(c['a'])}** vs **{_cell(c['b'])}**: {verdict} ({p})")
+        out.append("")
+    jury = report.get("jury")
+    if jury:
+        kappa = "–" if jury["kappa"] is None else f"{jury['kappa']:.2f}"
+        out += [
+            "### Jury agreement",
+            "",
+            f"{jury['jurors']} judge models graded {jury['verdicts']} answers: Fleiss κ = {kappa} "
+            f"({jury['agreement']}); {jury['unanimous_share'] * 100:.0f}% of verdicts were unanimous.",
+            "",
+        ]
+        if jury["disputed"]:
+            out.append(
+                "Most disputed tasks: "
+                + ", ".join(f"`{d['task']}` ({d['split_votes']})" for d in jury["disputed"])
+            )
+            out.append("")
+    return out
+
+
 def to_csv(report: dict[str, Any], table: str = "leaderboard") -> str:
     """``table``: ``leaderboard`` (one row per agent) or ``executions`` (one row per attempt)."""
     buf = io.StringIO()
@@ -450,5 +516,14 @@ def to_csv(report: dict[str, Any], table: str = "leaderboard") -> str:
     else:
         w.writerow([label for _, label in LEADERBOARD_COLUMNS])
         for r in report["leaderboard"]:
-            w.writerow(["" if r.get(k) is None else r.get(k) for k, _ in LEADERBOARD_COLUMNS])
+            w.writerow(["" if _csv_value(r, k) is None else _csv_value(r, k) for k, _ in LEADERBOARD_COLUMNS])
     return buf.getvalue()
+
+
+def _csv_value(row: dict[str, Any], key: str) -> Any:
+    """Flatten ``*_ci_low`` / ``*_ci_high`` from the ``[low, high]`` interval lists."""
+    for suffix, idx in (("_ci_low", 0), ("_ci_high", 1)):
+        if key.endswith(suffix):
+            ci = row.get(key[: -len(suffix)] + "_ci")
+            return ci[idx] if ci else None
+    return row.get(key)

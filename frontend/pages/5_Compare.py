@@ -16,6 +16,7 @@ from ui import (
     run_label,
     secs,
     show_error,
+    statistics_caption,
     tile,
     usd,
 )
@@ -61,7 +62,8 @@ priced = [r for r in board if r["cost_per_correct_usd"] is not None]
 cheapest = min(priced, key=lambda r: r["cost_per_correct_usd"]) if priced else None
 
 c1, c2, c3, c4 = st.columns(4)
-tile(c1, "🏆 Most reliable", pct(best["reliability_score"]), f"**{best['agent_name']}**")
+tie = f"  \n⚖️ statistically tied with {', '.join(best['tied_with'])}" if best.get("tied_with") else ""
+tile(c1, "🏆 Most reliable", pct(best["reliability_score"]), f"**{best['agent_name']}**{tie}")
 tile(c2, "🎯 Most accurate", pct(most_accurate["accuracy"]), f"**{most_accurate['agent_name']}**")
 tile(c3, "⚡ Fastest (p50)", secs(fastest["latency_ms_p50"]), f"**{fastest['agent_name']}**")
 tile(
@@ -73,6 +75,26 @@ tile(
 
 st.markdown("#### Leaderboard")
 st.dataframe(leaderboard_frame(data["leaderboard"]), hide_index=True, use_container_width=True)
+st.caption(statistics_caption(data))
+jury = data.get("jury")
+if jury:
+    with st.container(border=True):
+        j1, j2, j3 = st.columns([1, 1, 2])
+        j1.metric(
+            "⚖️ Jury agreement (Fleiss κ)",
+            "–" if jury["kappa"] is None else f"{jury['kappa']:.2f}",
+            help="How much the judge models agree beyond chance: 1 = always, 0 = no better than chance.",
+        )
+        j1.caption(jury["agreement"])
+        j2.metric("Unanimous verdicts", pct(jury["unanimous_share"]))
+        j2.caption(f"{jury['verdicts']} verdicts · {jury['jurors']} jurors")
+        if jury["disputed"]:
+            j3.markdown("**Most disputed tasks** (possibly ambiguous):")
+            j3.markdown(
+                "  \n".join(f"`{d['task']}` · {d['split_votes']} split votes" for d in jury["disputed"])
+            )
+        else:
+            j3.success("The jurors agreed on every answer.")
 
 has_freshness = any(r.get("freshness_checked") for r in board)
 tab_names = ["Overview", "Speed & cost", "Per task", "Failures & recovery"]

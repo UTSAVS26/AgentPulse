@@ -142,6 +142,7 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 - [Models](docs/models.md): bring your own model: connections, presets, keys, security
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula, the reliability score and freshness
+- [Statistics](docs/statistics.md): confidence intervals, statistical ties, and the jury of judges
 - [Stale-answer detection](docs/stale-answer-detection.md): pipeline, verdicts, freshness score, rate limits, live results
 - [Dashboard](docs/dashboard.md): every page and the chart design rules
 - [API reference](docs/api.md): endpoints with curl examples (full spec at http://localhost:8000/docs)

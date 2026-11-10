@@ -169,7 +169,7 @@ def metrics_payload(db: Session, run: BenchmarkRun) -> dict:
         for e in db.scalars(select(TaskExecution).where(TaskExecution.run_id == run_id))
     ]
     agents = _agent_info(db, run.agent_ids)
-    metrics = run_metrics(records, agents, task_lookup(db, run.suite_id))
+    metrics = run_metrics(records, agents, task_lookup(db, run.suite_id), seed=run.id)
     for row in metrics["leaderboard"]:  # how each agent's model was called (Bifrost or direct)
         info = agents.get(row["agent_id"], {})
         row.update(route=info.get("route"), provider=info.get("provider"), connection=info.get("connection"))

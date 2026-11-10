@@ -2,6 +2,49 @@
 
 All notable changes per build phase.
 
+## [v3.1] Statistical rigor and a jury of judges
+
+### Added
+- **Is the ranking real?** Every leaderboard row has a 95% interval for accuracy (Wilson) and the
+  reliability score (paired task-level bootstrap, seeded by the run id), plus a **tier**. Agents whose gap
+  is not significant (bootstrap p ≥ 0.05) share a tier and are shown as *statistically tied*. Each run gets
+  a power note ("…uncertain by about ±14 points"). See [docs/statistics.md](docs/statistics.md).
+- Compare: error bars on the reliability chart, a 95% CI and Tier column, a tie note on the *Most reliable*
+  tile, the statistics caption, and a **Jury** panel. Run Benchmark shows the caption too.
+- Reports: a *Reliability (95% CI)* and *Tier* column, a new *Is the ranking real?* section with pairwise
+  p-values, and *Jury agreement*; CSV adds CI and tier columns.
+- **`jury` scorer:** three frontier judges from labs the agents don't use (Claude Opus 5.5, Gemini 3.1 Pro,
+  DeepSeek V4 Pro; `JURY_MODELS`) grade in parallel through Bifrost; majority vote, per-juror votes stored
+  on the execution, Fleiss' κ and disputed tasks per run. Simulated jurors in mock mode.
+
+### Changed
+- `JUDGE_MODEL` and `FRESHNESS_MODEL` default to `openrouter/anthropic/claude-sonnet-5.5`: a stronger judge
+  that is not one of the benchmarked models, and doesn't share their Groq quotas. The Groq models became the
+  detector's fallbacks.
+- The backend version (sidebar, `/health`, API docs, report footer) is now **3.1.0**. It had stayed at
+  0.1.0 since v1; from now on it follows the CHANGELOG versions.
+
+### Fixed
+- Suites: picking a `jury` task in *Test a scorer* crashed the page, and the task table couldn't set `jury`.
+  The dashboard now offers every backend scorer (enforced by a test).
+- Paid judges failed on a low OpenRouter balance: OpenRouter reserves credit for the whole `max_tokens` and
+  answers `402 … can only afford N`. The LLM client now retries once within the affordable budget.
+- Executions expose each juror's vote (`jury`) in the API and JSON report, and the executions CSV has a
+  `jury_votes` column.
+- Cloud metadata addresses (`169.254.x.x`, `fe80::`, `metadata.google.internal`) are rejected as model endpoints
+  everywhere. Local and LAN servers are still allowed locally.
+- A stopped local server (e.g. Ollama) showed "Network is unreachable". It now says nothing is answering at the
+  address and asks whether the server is running; *Fetch models* shows it as an error.
+- Confirmation messages are shown after a rerun: suite import (and its warnings), agent created / saved / deleted.
+- Models → **🤖 New agent** opens Agents on the **Create** tab with the model filled in.
+- The scorer preview explains that `judge` / `jury` are approximated by `contains` there. CSV import asks for a
+  suite name before sending.
+- κ is reported as *not measurable* when every vote is the same (it said 1.0, "almost perfect").
+- An all-pass run no longer shows a 100–100% interval and "±0 points": zero-width intervals are hidden and the
+  power note is floored with the Wilson interval. A "–" interval is explained under the leaderboard.
+- Polish: equal-height cards on Home, clean export filenames (`factual-qa-copy.yaml`), and a shorter chart
+  title the chart toolbar no longer covers.
+
 ## [v2.4] Routes everywhere, plain-language Home, final polish
 
 ### Added

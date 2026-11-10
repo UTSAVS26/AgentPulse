@@ -15,6 +15,7 @@ from ui import (
     pct,
     run_label,
     show_error,
+    statistics_caption,
 )
 
 health = page_setup("Run Benchmark", "🏁")
@@ -160,6 +161,8 @@ def render_run() -> None:
     if any(r["executions"] for r in board):
         st.markdown("#### Leaderboard" + (" (partial)" if active else ""))
         st.dataframe(leaderboard_frame(board), hide_index=True, use_container_width=True)
+        if not active:
+            st.caption(statistics_caption(data))
         weights = " · ".join(f"{k.replace('_', ' ')} {v:.0%}" for k, v in data["weights"].items())
         st.caption(
             f"Reliability = weighted mean of {weights}. Undefined components (e.g. consistency with "

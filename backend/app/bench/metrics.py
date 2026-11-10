@@ -64,6 +64,7 @@ class ExecRecord:
     recovered: bool
     freshness_score: float | None = None
     freshness_verdict: str | None = None
+    jury: tuple[bool, ...] | None = None  # each juror's pass/fail (scorer: jury)
 
     @property
     def had_failure(self) -> bool:
@@ -90,7 +91,15 @@ class ExecRecord:
             recovered=bool(e.recovered),
             freshness_score=getattr(e, "freshness_score", None),
             freshness_verdict=getattr(e, "freshness_verdict", None),
+            jury=_jury_votes(getattr(e, "jury", None)),
         )
+
+
+def _jury_votes(raw: Any) -> tuple[bool, ...] | None:
+    if not raw:
+        return None
+    votes = tuple(bool(v.get("passed")) for v in raw if isinstance(v, dict) and v.get("passed") is not None)
+    return votes or None
 
 
 def percentile(values: Sequence[float], q: float) -> float | None:
@@ -122,6 +131,24 @@ def reliability_score(components: dict[str, float | None]) -> tuple[float | None
         return None, {}
     weights = {k: w / total for k, w in used.items()}
     return sum(components[k] * w for k, w in weights.items()), weights
+
+
+def reliability_components(records: Sequence[ExecRecord]) -> dict[str, float | None]:
+    """The four reliability components for one agent's executions (shared by the leaderboard and the
+    bootstrap in ``bench/stats.py``, so both use exactly the same definitions)."""
+    n = len(records)
+    by_task: dict[int, list[ExecRecord]] = defaultdict(list)
+    for r in records:
+        by_task[r.task_id].append(r)
+    multi = [rs for rs in by_task.values() if len(rs) >= 2]
+    failed = [r for r in records if r.had_failure]
+    error_rate = _ratio(sum(r.status != "ok" for r in records), n)
+    return {
+        "accuracy": _ratio(sum(r.passed for r in records), n),
+        "consistency": _ratio(sum(len({r.passed for r in rs}) == 1 for rs in multi), len(multi)),
+        "recovery_rate": _ratio(sum(r.recovered for r in failed), len(failed)),
+        "stability": None if error_rate is None else 1 - error_rate,
+    }
 
 
 def agent_metrics(records: Sequence[ExecRecord]) -> dict[str, Any]:
@@ -197,6 +224,7 @@ def run_metrics(
     records: Sequence[ExecRecord],
     agents: dict[int, dict[str, Any]],
     tasks: dict[int, dict[str, Any]],
+    seed: int = 0,
 ) -> dict[str, Any]:
     """Metrics for a whole run.
 
@@ -220,6 +248,7 @@ def run_metrics(
     leaderboard.sort(key=lambda r: (r["reliability_score"] or -1, r["accuracy"] or -1), reverse=True)
     for rank, row in enumerate(leaderboard, 1):
         row["rank"] = rank
+    statistics = _statistics(leaderboard, by_agent, seed)
 
     matrix = []
     for task_id, info in tasks.items():
@@ -234,4 +263,91 @@ def run_metrics(
         "task_matrix": matrix,
         "weights": RELIABILITY_WEIGHTS,
         "total_executions": len(records),
+        "statistics": statistics,
+        "jury": _jury_summary(records, tasks),
+    }
+
+
+def _bootstrap_score(records: Sequence[Any]) -> float | None:
+    return reliability_score(reliability_components(records))[0]
+
+
+def _statistics(
+    leaderboard: list[dict[str, Any]], by_agent: dict[int, list[ExecRecord]], seed: int
+) -> dict[str, Any]:
+    """Intervals, rank tiers and pairwise tests (bench/stats.py); annotates the leaderboard rows."""
+    from app.bench import stats
+
+    for row in leaderboard:
+        ci = stats.wilson(row["passed"], row["executions"])
+        row["accuracy_ci"] = list(ci) if ci else None
+        row["reliability_ci"], row["tier"], row["tied_with"] = None, None, []
+    scored = {
+        r["agent_id"]: by_agent[r["agent_id"]] for r in leaderboard if r["reliability_score"] is not None
+    }
+    all_records = [x for rs in scored.values() for x in rs]
+    n_tasks = len({x.task_id for x in all_records})
+    repeats = max((x.repeat_idx for x in all_records), default=-1) + 1
+    if not scored:
+        return {"method": "paired task-level bootstrap", "resamples": 0, "comparisons": [],
+                "power_note": stats.power_note(0, 0, [])}  # fmt: skip
+    draws = stats.paired_bootstrap(scored, _bootstrap_score, seed=seed)
+    half_widths = []
+    for row in leaderboard:
+        ci = stats.interval(draws.get(row["agent_id"], []))
+        if ci and ci[1] - ci[0] > 1e-9:  # a zero-width interval (all pass / all fail) would claim certainty
+            row["reliability_ci"] = list(ci)
+        boot_hw = (ci[1] - ci[0]) / 2 if ci else 0.0
+        # Floor with the Wilson accuracy interval: 5/5 passes is not "±0" (Wilson: 57–100%).
+        acc = row.get("accuracy_ci")
+        wilson_hw = (acc[1] - acc[0]) / 2 if acc else 0.0
+        if row["agent_id"] in scored:
+            half_widths.append(max(boot_hw, wilson_hw))
+    order = [r["agent_id"] for r in leaderboard if r["agent_id"] in scored]
+    tiers, comparisons = stats.rank_tiers(order, draws)
+    names = {r["agent_id"]: r["agent_name"] for r in leaderboard}
+    for row in leaderboard:
+        tier = tiers.get(row["agent_id"])
+        row["tier"] = tier
+        row["tied_with"] = (
+            [names[a] for a, t in tiers.items() if t == tier and a != row["agent_id"]] if tier else []
+        )
+    return {
+        "method": "paired task-level bootstrap",
+        "resamples": len(next(iter(draws.values()), [])),
+        "tasks": n_tasks,
+        "repeats": repeats,
+        "power_note": stats.power_note(n_tasks, repeats, half_widths),
+        "comparisons": [
+            {
+                "a": names[c["a"]],
+                "b": names[c["b"]],
+                "p": c["p"],
+                "significant": c["p"] is not None and c["p"] < stats.ALPHA,
+            }
+            for c in comparisons
+        ],
+    }
+
+
+def _jury_summary(records: Sequence[ExecRecord], tasks: dict[int, dict[str, Any]]) -> dict[str, Any] | None:
+    """Fleiss' κ across jurors and the tasks they disagreed on most."""
+    from app.bench import stats
+
+    voted = [r for r in records if r.jury]
+    if not voted:
+        return None
+    kappa = stats.fleiss_kappa([r.jury for r in voted])
+    split: dict[int, int] = defaultdict(int)
+    for r in voted:
+        if len(set(r.jury)) > 1:
+            split[r.task_id] += 1
+    disputed = sorted(split.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    return {
+        "verdicts": len(voted),
+        "jurors": max(len(r.jury) for r in voted),
+        "kappa": kappa,
+        "agreement": stats.kappa_label(kappa),
+        "unanimous_share": sum(len(set(r.jury)) == 1 for r in voted) / len(voted),
+        "disputed": [{"task": tasks.get(t, {}).get("key", str(t)), "split_votes": n} for t, n in disputed],
     }

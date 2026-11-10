@@ -6,6 +6,9 @@
 * When private endpoints are not allowed (the default on the public demo), the host is resolved and every
   address must be public: no private, loopback, link-local (cloud metadata), reserved or multicast ranges,
   and no ``*.internal`` names. This stops visitors from making the server probe its own network (SSRF).
+* Cloud metadata endpoints (link-local ``169.254.0.0/16``, ``fe80::/10``, ``metadata.google.internal``) are
+  blocked **everywhere**, even where private endpoints are allowed: no model server lives there, and on a
+  cloud VM they hand out the machine's credentials.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from app.config import Settings
 
 LOCAL_NAMES = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"}
 BLOCKED_SUFFIXES = (".internal", ".local", ".localhost")
+METADATA_NAMES = {"metadata", "metadata.google.internal", "instance-data", "instance-data.ec2.internal"}
 
 
 class UnsafeURL(ValueError):
@@ -91,9 +95,27 @@ def _public_only(url: str) -> None:
             )
 
 
+def _no_metadata(url: str) -> None:
+    host = (urlsplit(url).hostname or "").lower()
+    if host in METADATA_NAMES:
+        raise UnsafeURL(f"'{host}' is a cloud metadata address, not a model endpoint")
+    try:
+        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return  # unresolvable here: the request fails later with a clear "unknown host"
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        mapped = getattr(ip, "ipv4_mapped", None) or ip
+        if mapped.is_link_local:
+            raise UnsafeURL(
+                f"'{host}' is a link-local address ({ip}), used for cloud metadata, not a model endpoint"
+            )
+
+
 def check(url: str, settings: Settings) -> CheckedURL:
     """Normalise ``url`` and enforce the network policy. Raises :class:`UnsafeURL`."""
     checked = normalize(url, settings.localhost_alias)
+    _no_metadata(checked.url)
     if not private_allowed(settings):
         _public_only(checked.url)
     return checked

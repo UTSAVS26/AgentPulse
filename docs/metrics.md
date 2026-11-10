@@ -64,6 +64,13 @@ Answers to ⏰ time-sensitive tasks are checked by the [stale-answer detector](s
 Freshness is reported **next to** the reliability score, not inside it, so the reliability weights stay
 comparable across suites with and without time-sensitive tasks.
 
+## Uncertainty and tiers
+
+Every leaderboard row also carries `accuracy_ci` (Wilson), `reliability_ci` (paired task-level bootstrap),
+`tier` and `tied_with`. Each run carries `statistics` (`power_note`, pairwise `comparisons` with p-values) and,
+for `jury`-graded tasks, `jury` (Fleiss' κ, unanimous share, disputed tasks). Agents in one tier are not
+significantly different. Methods: [statistics.md](statistics.md).
+
 ## Task matrix
 
 `task_matrix` gives, for every task, each agent's pass rate across repeats (`null` if the agent hasn't

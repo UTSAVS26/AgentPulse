@@ -204,3 +204,16 @@ def test_freshness_bars_are_shares_with_counts_and_skip_unchecked_agents():
     assert (
         fig.layout.legend.traceorder == "normal"
     )  # fresh → stale → wrong, not plotly's reversed stack order
+
+
+def test_reliability_bars_show_confidence_intervals():
+    board = [
+        row(1, "A", reliability_score=0.8, reliability_ci=[0.6, 0.9]),
+        row(2, "B", reliability_score=0.5, reliability_ci=None),
+    ]
+    fig = charts.reliability_bars(board, charts.agent_colors([1, 2]))
+    err = fig.data[0].error_x
+    assert list(err.array) == pytest.approx([0.0, 0.1]) and list(err.arrayminus) == pytest.approx([0.0, 0.2])
+    labels = {a.y: (a.text, a.x) for a in fig.layout.annotations}
+    assert labels["A"][0] == "80%" and labels["A"][1] == pytest.approx(0.915)  # past the whisker
+    assert "95% CI" in fig.data[0].hovertemplate and fig.data[0].customdata[1][3] == "60–90%"

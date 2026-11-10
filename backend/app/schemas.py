@@ -113,6 +113,10 @@ class ExecutionOut(BaseModel):
     freshness_verdict: str | None = Field(
         default=None, description="Stale-answer check of this answer: fresh | stale | wrong | unverified..."
     )
+    jury: list[dict] | None = Field(
+        default=None,
+        description="`jury` scorer: one vote per judge, {model, passed, score, reason} or {model, error}.",
+    )
     created_at: datetime
 
 
