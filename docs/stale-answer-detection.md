@@ -5,7 +5,8 @@ minister, last tournament's winner, an old "latest" version. The stale-answer de
 checks them against **live Tavily search results and their publication dates**.
 
 Code: [`backend/app/freshness/`](../backend/app/freshness/). API: [`POST /freshness/check`](api.md#freshness).
-UI: **🕰️ Stale-Answer Detector** page, and the **🕰️ Freshness** tab on Compare.
+UI: **🕰️ Stale-Answer Detector** page, and the **🕰️ Freshness** tab on Compare. The same detector powers the
+[Freshness Guard](guard.md), which checks answers on their way from a model to an app.
 
 ## Pipeline
 

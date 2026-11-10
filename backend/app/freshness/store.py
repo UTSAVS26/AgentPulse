@@ -20,6 +20,8 @@ def save_check(
     execution_id: int | None = None,
     mock_mode: bool = False,
     source: str = "text",
+    model: str | None = None,
+    guard_action: str | None = None,
 ) -> FreshnessCheck:
     """Add a check and its claims to the session and flush (the caller commits)."""
     check = FreshnessCheck(
@@ -31,6 +33,8 @@ def save_check(
         extraction=result.extraction[:80],
         mock_mode=mock_mode,
         source=source,
+        model=model,
+        guard_action=guard_action,
         latency_ms=round(result.latency_ms, 1),
         status="done",
         claims=[
@@ -71,6 +75,8 @@ def _base(check: FreshnessCheck) -> dict:
         "extraction": check.extraction,
         "mock_mode": check.mock_mode,
         "source": check.source,
+        "model": check.model,
+        "guard_action": check.guard_action,
         "latency_ms": check.latency_ms,
         "created_at": check.created_at,
         "counts": _counts(check),

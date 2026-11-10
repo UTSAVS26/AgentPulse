@@ -143,6 +143,7 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula, the reliability score and freshness
 - [Statistics](docs/statistics.md): confidence intervals, statistical ties, and the jury of judges
+- [Freshness Guard](docs/guard.md): an OpenAI-compatible proxy that fact-checks every answer (annotate, correct or block)
 - [Live Freshness Bench](docs/freshbench.md): a benchmark generated from today's news, and each model's knowledge cutoff
 - [Stale-answer detection](docs/stale-answer-detection.md): pipeline, verdicts, freshness score, rate limits, live results
 - [Dashboard](docs/dashboard.md): every page and the chart design rules

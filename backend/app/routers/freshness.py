@@ -87,15 +87,20 @@ def list_checks(
     limit: int = 30,
     execution_id: int | None = None,
     manual_only: bool = False,
+    source: str | None = None,
     db: Session = Depends(get_db),
 ) -> list[FreshnessCheckSummary]:
-    """`execution_id` filters to one execution's checks; `manual_only` hides the automatic checks made
-    during benchmark runs (keeps pasted-text and on-demand execution checks)."""
+    """`execution_id` filters to one execution's checks; `manual_only` hides the automatic checks (benchmark
+    runs and Freshness Guard calls); `source` keeps one source (`text`, `execution`, `benchmark`, `guard`)."""
     q = select(FreshnessCheck).order_by(FreshnessCheck.id.desc()).limit(max(1, min(limit, 200)))
     if execution_id is not None:
         q = q.where(FreshnessCheck.execution_id == execution_id)
     if manual_only:
-        q = q.where((FreshnessCheck.source.is_(None)) | (FreshnessCheck.source != "benchmark"))
+        q = q.where(
+            (FreshnessCheck.source.is_(None)) | (FreshnessCheck.source.not_in(("benchmark", "guard")))
+        )
+    if source:
+        q = q.where(FreshnessCheck.source == source)
     return [check_summary(c) for c in db.scalars(q)]
 
 

@@ -223,6 +223,20 @@ Tasks accept `event_date` (`YYYY-MM-DD`), `source_url` and `source_title`; suite
 (`freshbench` for snapshots, which are read-only) and `snapshot_date`. `GET /runs/{id}/metrics` adds
 `knowledge_curve` (or `null`).
 
+## Freshness Guard
+
+An OpenAI-compatible proxy that fact-checks answers: point an OpenAI SDK at `<backend>/guard/v1`. Details:
+[guard.md](guard.md).
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/guard/v1/chat/completions` | Chat completion through the Guard. Mode: header `X-AgentPulse-Guard` or body `guard` (`annotate` · `correct` · `block` · `off`). Returns OpenAI JSON (or SSE with `stream: true`) plus `agentpulse` and `X-AgentPulse-*` headers. |
+| GET | `/guard/v1/models` | Models the Guard can forward to (OpenAI list format) |
+| GET | `/guard/stats` | Guarded calls per model: verdicts, actions, flagged rate |
+
+`GET /freshness/checks` takes `source` (`text` · `execution` · `benchmark` · `guard`); `manual_only` hides
+benchmark and Guard checks. Check summaries include `model` and `guard_action` for Guard calls.
+
 ## Reports
 
 | Method | Path | Description |

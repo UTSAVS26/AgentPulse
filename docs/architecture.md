@@ -88,6 +88,9 @@ tasks. Details: [stale-answer-detection.md](stale-answer-detection.md).
 - `app/seed/demo.py`: on a database with no runs, startup seeds two example freshness checks, then, on its own
   thread (so startup stays fast and the engine's run workers stay free), a mock Freshness Bench run and two
   mock benchmark runs. See [setup.md](setup.md#demo-data).
+- `app/guard/` + `app/routers/guard.py`: the Freshness Guard, an OpenAI-compatible proxy that forwards a chat
+  request through the model router, runs the stale-answer detector on the answer and annotates, corrects or
+  blocks it. See [guard.md](guard.md).
 - `app/freshbench/`: the Live Freshness Bench: question generator (Tavily news by age window → writer →
   validator), background jobs, the knowledge-cutoff curve and the daily pulse. See [freshbench.md](freshbench.md).
 

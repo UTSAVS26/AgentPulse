@@ -533,3 +533,13 @@ def test_truncated_empty_reply_moves_on_to_the_next_model():
     llm = Thinker(extract='{"claims": []}')
     ch = FreshnessChecker(llm, CountingSearch(), ["m/thinker", "m/ok"], today=TODAY, retry_backoff_s=0)
     assert ch.check("Some text here.").extraction == "llm" and llm.tried == ["m/thinker", "m/ok"]
+
+
+def test_short_answers_keep_their_question_but_full_sentences_stand_alone():
+    from app.freshness.heuristics import heuristic_claims
+
+    q = "Who is the current UK prime minister?"
+    bare = heuristic_claims("Keir Starmer.", question=q)[0]
+    assert bare.text == f"Keir Starmer (answer to: {q})" and bare.time_sensitive and bare.query == q
+    full = heuristic_claims("The current UK Prime Minister is Rishi Sunak.", question=q)[0]
+    assert "(answer to" not in full.text and full.time_sensitive and full.query == q

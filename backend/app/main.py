@@ -20,6 +20,7 @@ from app.routers import agents as agents_router
 from app.routers import connections as connections_router
 from app.routers import freshbench as freshbench_router
 from app.routers import freshness as freshness_router
+from app.routers import guard as guard_router
 from app.routers import reports as reports_router
 from app.routers import runs as runs_router
 from app.routers import suites as suites_router
@@ -62,6 +63,7 @@ app.include_router(runs_router.router)
 app.include_router(freshness_router.router)
 app.include_router(reports_router.router)
 app.include_router(freshbench_router.router)
+app.include_router(guard_router.router)
 
 
 class ComponentStatus(BaseModel):

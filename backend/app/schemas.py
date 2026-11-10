@@ -355,7 +355,13 @@ class FreshnessCheckSummary(BaseModel):
     verdict: str | None = Field(description="fresh | stale | wrong | unverified | timeless | no_claims")
     extraction: str | None
     mock_mode: bool | None
-    source: str | None = Field(default=None, description="text | execution | benchmark (automatic)")
+    source: str | None = Field(default=None, description="text | execution | benchmark (automatic) | guard")
+    model: str | None = Field(
+        default=None, description="Freshness Guard: the model whose answer was checked."
+    )
+    guard_action: str | None = Field(
+        default=None, description="Freshness Guard: annotated | corrected | blocked."
+    )
     latency_ms: float | None
     created_at: datetime
     counts: dict[str, int] = Field(default_factory=dict, description="Claims per verdict.")

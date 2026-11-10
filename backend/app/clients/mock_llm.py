@@ -34,7 +34,9 @@ from app.clients import mock_news
 from app.clients.llm import LLMError, LLMResponse, ToolCall
 from app.clients.mock_freshbench import freshbench_responder
 from app.clients.mock_freshness import freshness_responder
+from app.clients.mock_guard import guard_responder
 from app.clients.mock_judge import judge_responder
+from app.clients.mock_search import mock_fact_answer
 
 Responder = Callable[[str, list[dict[str, Any]], random.Random], str | None]
 
@@ -137,6 +139,7 @@ class MockLLMClient:
             freshness_responder,
             judge_responder,
             freshbench_responder,
+            guard_responder,
             *(responders or []),
         ]
         self.failure_rate_override = failure_rate_override
@@ -283,6 +286,11 @@ class MockLLMClient:
             return f"The answer is {answer}.", []
         if good_tool_result:
             return f"Based on the tool result: {good_tool_result[:300]}", []
+        # A question on a known topic (e.g. through the Freshness Guard): answered from "training data", so
+        # models with an older knowledge cutoff are more often out of date.
+        fact = mock_fact_answer(user_prompt, min(0.85, 0.35 + profile.cutoff_days / 1000), rng)
+        if fact:
+            return fact, []
         return f"(mock {model}) Here is my best answer to: {user_prompt[:160]}", []
 
     def _choose_tool(self, prompt: str, available: list[str], call_id: str = "call_0") -> ToolCall | None:
