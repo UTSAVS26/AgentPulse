@@ -396,9 +396,17 @@ def import_suite(
 )
 def preview_score(body: ScorePreviewIn) -> ScorePreviewOut:
     result = score_output(body.output, scorer=body.scorer, expected=body.expected, tolerance=body.tolerance)
+    detail = result.detail
+    if body.scorer in ("judge", "jury"):
+        graders = "an LLM judge" if body.scorer == "judge" else "a jury of judge models"
+        fallback = detail.split("contains: ", 1)[-1]
+        detail = (
+            f"preview only: in a benchmark run, {graders} grades this answer. "
+            f"Here it's approximated by checking the expected text appears ({fallback})"
+        )
     return ScorePreviewOut(
         score=result.score,
         passed=result.passed,
-        detail=result.detail,
+        detail=detail,
         expected_rendered=render_expected(body.expected),
     )

@@ -122,6 +122,7 @@ class TaskExecution(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     freshness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     freshness_verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    jury: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)  # jury scorer votes
     # fresh|stale|wrong|unverified|timeless|no_claims; NULL = not checked
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

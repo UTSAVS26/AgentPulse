@@ -85,20 +85,57 @@ def reliability_bars(board: list[dict], colors: dict[int, str]) -> go.Figure:
             orientation="h",
             marker={"color": [colors.get(r["agent_id"], OTHER) for r in rows], "line": {"width": 0}},
             text=[_pct(r["reliability_score"]) for r in rows],
-            textposition="outside",
-            textfont={"color": INK},
+            textposition="none",  # labels are annotations past the error bar (below)
             cliponaxis=False,
+            error_x=_ci_error(rows),
             customdata=[
-                [_pct(r["accuracy"]), _pct(r["consistency"]), _pct(r["recovery_rate"])] for r in rows
+                [_pct(r["accuracy"]), _pct(r["consistency"]), _pct(r["recovery_rate"]), _ci_text(r)]
+                for r in rows
             ],
-            hovertemplate="<b>%{y}</b><br>Reliability %{x:.0%}<br>Accuracy %{customdata[0]}"
-            "<br>Consistency %{customdata[1]}<br>Recovery %{customdata[2]}<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>Reliability %{x:.0%} (95% CI %{customdata[3]})"
+            "<br>Accuracy %{customdata[0]}<br>Consistency %{customdata[1]}<br>Recovery %{customdata[2]}"
+            "<extra></extra>",
         )
     )
-    _layout(fig, "Reliability score", height=max(220, 56 * len(rows) + 80))
-    fig.update_xaxes(range=[0, 1.12], tickformat=".0%", showgrid=True)
+    for r in rows:
+        ci = r.get("reliability_ci")
+        end = max(r["reliability_score"], ci[1] if ci else 0)
+        fig.add_annotation(
+            x=end + 0.015,
+            y=r["agent_name"],
+            text=_pct(r["reliability_score"]),
+            showarrow=False,
+            xanchor="left",
+            font={"color": INK, "size": 13},
+        )
+    _layout(fig, "Reliability (± 95% CI)", height=max(220, 56 * len(rows) + 80))
+    fig.update_xaxes(range=[0, 1.16], tickformat=".0%", showgrid=True)
     fig.update_yaxes(showgrid=False)
     return fig
+
+
+def _ci_text(row: dict) -> str:
+    ci = row.get("reliability_ci")
+    return f"{ci[0] * 100:.0f}–{ci[1] * 100:.0f}%" if ci else "n/a"
+
+
+def _ci_error(rows: list[dict]) -> dict:
+    """Asymmetric error bars from each row's ``reliability_ci`` (none where undefined)."""
+    plus, minus = [], []
+    for r in rows:
+        ci, x = r.get("reliability_ci"), r["reliability_score"]
+        plus.append(max(0.0, ci[1] - x) if ci else 0.0)
+        minus.append(max(0.0, x - ci[0]) if ci else 0.0)
+    return {
+        "type": "data",
+        "symmetric": False,
+        "array": plus,
+        "arrayminus": minus,
+        "color": INK_2,
+        "thickness": 1.5,
+        "width": 6,
+        "visible": any(plus) or any(minus),
+    }
 
 
 # ------------------------------------------------------------------------------------ radar

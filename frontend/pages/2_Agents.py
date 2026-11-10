@@ -63,7 +63,18 @@ else:
 
 by_label = {f"{a['name']}  ·  {a['model']}": a for a in agents}
 
-tab_try, tab_create, tab_edit = st.tabs(["▶️ Try an agent", "➕ Create", "✏️ Edit / delete"])
+flash = st.session_state.pop("agents_flash", None)  # set before a rerun, shown after it
+if flash:
+    st.success(flash)
+if st.session_state.get("prefill_agent_model"):
+    # arrived from Models → "New agent": open on Create (the first tab is the selected one)
+    st.info(
+        f"Model **{st.session_state.get('prefill_agent_name') or st.session_state['prefill_agent_model']}** "
+        "is filled in below: check the name, pick tools and click **Save**."
+    )
+    tab_create, tab_try, tab_edit = st.tabs(["➕ Create", "▶️ Try an agent", "✏️ Edit / delete"])
+else:
+    tab_try, tab_create, tab_edit = st.tabs(["▶️ Try an agent", "➕ Create", "✏️ Edit / delete"])
 
 
 def _model_label(model: str) -> str:
@@ -187,12 +198,11 @@ with tab_create:
             "model": st.session_state["prefill_agent_model"],
             "name": st.session_state.get("prefill_agent_name", ""),
         }
-        st.info("Model pre-selected from the **Models** page: the ➕ Create tab has it ready.")
     payload = agent_form("create_form", prefill or None)
     if payload:
         created, err = api.post("/agents", json=payload)
         if not show_error(err):
-            st.success(f"Created agent **{created['name']}** (id {created['id']}).")
+            st.session_state["agents_flash"] = f"Created agent **{created['name']}** (id {created['id']})."
             st.session_state.pop("prefill_agent_model", None)
             st.session_state.pop("prefill_agent_name", None)
             st.rerun()
@@ -208,7 +218,7 @@ with tab_edit:
         if payload:
             _, err = api.put(f"/agents/{agent['id']}", json=payload)
             if not show_error(err):
-                st.success("Saved.")
+                st.session_state["agents_flash"] = f"Saved **{payload['name']}**."
                 st.rerun()
 
         st.divider()
@@ -216,5 +226,5 @@ with tab_edit:
         if st.button("Delete agent", disabled=not confirm):
             _, err = api.delete(f"/agents/{agent['id']}")
             if not show_error(err):
-                st.success("Deleted.")
+                st.session_state["agents_flash"] = f"Deleted **{agent['name']}**."
                 st.rerun()

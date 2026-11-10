@@ -128,8 +128,16 @@ Illustrative `/runs/{id}/metrics` leaderboard row (abridged):
  "executions": 6, "passed": 5, "accuracy": 0.83, "consistency": null, "recovery_rate": null,
  "error_rate": 0.0, "latency_ms_p50": 4100, "latency_ms_p95": 9800, "tokens_total": 24044,
  "cost_usd_total": 0.00449, "reliability_score": 0.91,
- "reliability_weights": {"accuracy": 0.727, "stability": 0.273}}
+ "reliability_weights": {"accuracy": 0.727, "stability": 0.273},
+ "accuracy_ci": [0.44, 0.97], "reliability_ci": [0.62, 1.0], "tier": 1, "tied_with": ["Qwen3.8 27B"]}
 ```
+
+The response also has `statistics` (`method`, `resamples`, `tasks`, `repeats`, `power_note`, and
+`comparisons`: `[{"a", "b", "p", "significant"}]` for adjacent agents) and `jury` (`null` unless tasks use
+the `jury` scorer; otherwise `verdicts`, `jurors`, `kappa`, `agreement`, `unanimous_share`, `disputed`).
+Executions graded by the jury carry `jury`: one `{model, passed, score, reason}` or `{model, error}` per juror
+(also in the JSON report; the executions CSV has a readable `jury_votes` column).
+Methods: [statistics.md](statistics.md).
 
 `POST /runs` also takes `check_freshness` (default `true`): run the stale-answer detector on answers to
 time-sensitive tasks. Executions then carry `freshness_score` and `freshness_verdict`, and the leaderboard rows

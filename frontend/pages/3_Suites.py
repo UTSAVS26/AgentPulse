@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -16,11 +18,11 @@ st.caption(
     "read-only (duplicate one to change it); your own suites can be edited freely until a run uses them."
 )
 
-SCORERS = ["contains", "exact", "numeric", "regex", "judge"]
+SCORERS = ["contains", "exact", "numeric", "regex", "judge", "jury"]
 SCORER_HELP = (
     "contains: expected text appears (use | for alternatives) · exact: whole answer matches · "
     "numeric: a number in the final sentence within ± tolerance · regex: pattern matches · "
-    "judge: an LLM grades the answer (live mode)"
+    "judge: an LLM grades the answer · jury: three judge models from different labs vote"
 )
 
 
@@ -34,6 +36,11 @@ if show_error(err):
 suites = suites or []
 
 # ------------------------------------------------------------------------------------ create / import
+flash = st.session_state.pop("suites_flash", None)
+if flash:
+    st.success(flash[0])
+    for w in flash[1]:
+        st.warning(w)
 with st.expander("➕ Create a suite", expanded=not any(not s["builtin"] for s in suites)):
     blank, upload = st.tabs(["Blank suite", "Import a file (YAML or CSV)"])
     with blank:
@@ -55,16 +62,19 @@ with st.expander("➕ Create a suite", expanded=not any(not s["builtin"] for s i
         import_name = st.text_input(
             "Suite name", help="Required for CSV; overrides the name inside a YAML file."
         )
-        if st.button("Import", disabled=file is None):
-            fmt = "csv" if file.name.lower().endswith(".csv") else "yaml"
+        is_csv = file is not None and file.name.lower().endswith(".csv")
+        if is_csv and not import_name.strip():
+            st.caption("A CSV file has no suite name inside: type one in **Suite name** above.")
+        if st.button("Import", disabled=file is None or (is_csv and not import_name.strip())):
+            fmt = "csv" if is_csv else "yaml"
             params = {"format": fmt, **({"name": import_name} if import_name.strip() else {})}
             result, err = api.post_text("/suites/import", file.getvalue().decode("utf-8", "replace"), params)
             if not show_error(err):
-                for w in result["warnings"]:
-                    st.warning(w)
                 _select(result["suite"]["id"])
-                st.success(
-                    f"Imported {result['suite']['task_count']} tasks into '{result['suite']['name']}'."
+                # shown after the rerun (a message written before st.rerun() is never seen)
+                st.session_state["suites_flash"] = (
+                    f"Imported {result['suite']['task_count']} tasks into '{result['suite']['name']}'.",
+                    result["warnings"],
                 )
                 st.rerun()
 
@@ -115,7 +125,7 @@ for col, fmt in ((a2, "yaml"), (a3, "csv")):
         col.download_button(
             f"⬇️ Export {fmt.upper()}",
             body,
-            file_name=f"{suite['name'].lower().replace(' ', '-')}.{fmt}",
+            file_name=f"{re.sub(r'[^a-z0-9]+', '-', suite['name'].lower()).strip('-') or 'suite'}.{fmt}",
             mime="text/csv" if fmt == "csv" else "application/yaml",
         )
 nav_link(a4, "pages/4_Run_Benchmark.py", "Run this suite", "🏁")
@@ -219,7 +229,12 @@ with st.expander("🧪 Test a scorer"):
     pick = st.selectbox("Task", ["(custom)", *options])
     base = options.get(pick, {"scorer": "contains", "expected": "", "tolerance": 0.0})
     p1, p2, p3 = st.columns([1, 2, 1])
-    scorer = p1.selectbox("Scorer", SCORERS, index=SCORERS.index(base["scorer"]), key=f"pv_scorer_{pick}")
+    scorer = p1.selectbox(
+        "Scorer",
+        SCORERS,
+        index=SCORERS.index(base["scorer"]) if base["scorer"] in SCORERS else 0,
+        key=f"pv_scorer_{pick}",
+    )
     expected = p2.text_input("Expected", value=base["expected"], key=f"pv_exp_{pick}")
     tolerance = p3.number_input(
         "Tolerance", min_value=0.0, value=float(base["tolerance"]), key=f"pv_tol_{pick}"

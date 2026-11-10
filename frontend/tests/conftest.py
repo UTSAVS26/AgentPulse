@@ -1,8 +1,8 @@
 """Shared fixtures for the dashboard tests.
 
 ``make ui-test`` runs against *your* running stack, so the session cleans up after itself: benchmark runs
-created during the session, and the test connections ("UI conn …") and suites ("UI suite …", "Blank …") the
-tests add.
+and detector checks created during the session, and the test connections ("UI conn …") and suites
+("UI suite …", "UI jury …", "Blank …") the tests add.
 Nothing that existed before the session is touched.
 """
 
@@ -15,7 +15,7 @@ import requests
 
 BACKEND = os.getenv("BACKEND_URL", "http://localhost:8000")
 TEST_CONNECTIONS = ("UI conn ",)
-TEST_SUITES = ("UI suite ", "Blank ")
+TEST_SUITES = ("UI suite ", "UI jury ", "Blank ")
 
 
 def _get(path: str):
@@ -30,6 +30,8 @@ def _get(path: str):
 def clean_up_test_data():
     runs = _get("/runs?limit=200") or []
     watermark = max((r["id"] for r in runs), default=0)
+    checks = _get("/freshness/checks?manual_only=true&limit=200") or []
+    check_watermark = max((c["id"] for c in checks), default=0)
     yield
     for run in _get("/runs?limit=200") or []:
         if run["id"] <= watermark:
@@ -40,6 +42,9 @@ def clean_up_test_data():
     for suite in _get("/suites") or []:
         if not suite["builtin"] and suite["name"].startswith(TEST_SUITES):
             requests.delete(f"{BACKEND}/suites/{suite['id']}", timeout=10)
+    for check in _get("/freshness/checks?manual_only=true&limit=200") or []:
+        if check["id"] > check_watermark:  # detector checks the tests ran (keeps your History clean)
+            requests.delete(f"{BACKEND}/freshness/checks/{check['id']}", timeout=10)
     for conn in _get("/connections") or []:
         if conn["name"].startswith(TEST_CONNECTIONS) and not conn["agents"]:
             requests.delete(f"{BACKEND}/connections/{conn['id']}", timeout=10)

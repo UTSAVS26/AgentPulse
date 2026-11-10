@@ -204,13 +204,16 @@ def test_yaml_import_errors(api):
         ({"output": "Probably Lima.", "scorer": "contains", "expected": "Lima|Cusco"}, True),
         ({"output": "It's Cusco", "scorer": "exact", "expected": "Lima"}, False),
         ({"output": "Lima", "scorer": "judge", "expected": "Lima"}, True),
+        ({"output": "It's Lima.", "scorer": "jury", "expected": "Lima"}, True),
+        ({"output": "Cusco", "scorer": "jury", "expected": "Lima"}, False),
     ],
 )
 def test_scoring_preview(api, payload, passed):
     res = api.post("/scoring/preview", json=payload)
     assert res.status_code == 200 and res.json()["passed"] is passed
-    if payload["scorer"] == "judge":
-        assert "contains" in res.json()["detail"]
+    if payload["scorer"] in ("judge", "jury"):
+        detail = res.json()["detail"]
+        assert detail.startswith("preview only: in a benchmark run,") and "configured" not in detail
 
 
 def test_scoring_preview_renders_date_placeholders(api):

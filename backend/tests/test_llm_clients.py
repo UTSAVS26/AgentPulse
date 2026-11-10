@@ -204,3 +204,64 @@ def test_provider_errors_are_redacted_of_account_ids():
     )
     assert "org_" not in exc.message and "org_" not in str(exc)
     assert exc.message == "Rate limit reached for model `openai/gpt-oss-20b` service tier on_demand"
+
+
+def test_connection_errors_are_described_plainly():
+    """A stopped local server must read as 'not running', not as Docker's IPv6 'Network is unreachable'."""
+    import httpx
+
+    from app.clients.llm import describe_http_error
+
+    for raw in ("[Errno 101] Network is unreachable", "[Errno 111] Connection refused"):
+        assert "Is the server running" in describe_http_error(httpx.ConnectError(raw))
+    assert "unknown host" in describe_http_error(httpx.ConnectError("[Errno -2] Name or service not known"))
+    assert describe_http_error(httpx.ReadError("boom")) == "boom"
+
+
+def _ok_body(text="ok"):
+    return {
+        "choices": [{"message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+    }
+
+
+def test_low_balance_402_retries_once_within_the_affordable_budget():
+    """OpenRouter reserves credit for the whole max_tokens; with a low balance it names what it can afford."""
+    asked = []
+
+    def handler(request):
+        budget = json.loads(request.content).get("max_tokens")
+        asked.append(budget)
+        if budget > 1124:
+            msg = (
+                "This request requires more credits, or fewer max_tokens. "
+                f"You requested up to {budget} tokens, but can only afford 1124."
+            )
+            return httpx.Response(402, json={"error": {"message": msg, "code": 402}})
+        return httpx.Response(200, json=_ok_body("PASS"))
+
+    res = _bifrost(handler).chat(MODEL, [{"role": "user", "content": "grade"}], max_tokens=1500)
+    assert res.content == "PASS" and asked == [1500, 1011]
+
+
+def test_402_without_an_affordable_budget_is_not_retried():
+    asked = []
+
+    def handler(request):
+        asked.append(1)
+        msg = "You requested up to 300 tokens, but can only afford 40."
+        return httpx.Response(402, json={"error": {"message": msg}})
+
+    with pytest.raises(LLMError) as exc:
+        _bifrost(handler).chat(MODEL, [{"role": "user", "content": "x"}], max_tokens=300)
+    assert exc.value.status_code == 402 and len(asked) == 1
+
+    asked.clear()
+
+    def plain(request):
+        asked.append(1)
+        return httpx.Response(402, json={"error": {"message": "Payment required"}})
+
+    with pytest.raises(LLMError):
+        _bifrost(plain).chat(MODEL, [{"role": "user", "content": "x"}], max_tokens=300)
+    assert len(asked) == 1

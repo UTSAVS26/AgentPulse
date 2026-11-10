@@ -10,6 +10,9 @@ Scorers
               (absolute; ``tolerance=0`` means equal up to 1e-6 relative).
 ``regex``     ``re.search(expected, output, IGNORECASE)``.
 ``judge``     an LLM (fixed judge model via Bifrost) grades the answer 0–1 against the reference.
+``jury``      several judge models (``JURY_MODELS``, ideally from different providers, via Bifrost) grade
+              in parallel; the majority decides, the score is their mean, and each vote is kept so
+              agreement (Fleiss' κ) can be measured per run. A juror that fails is left out.
 
 Expected answers may contain date placeholders resolved at scoring time:
 ``{{current_year}}``, ``{{today_iso}}``, ``{{today_weekday}}``.
@@ -26,7 +29,7 @@ from datetime import UTC, date, datetime
 
 from app.clients.llm import LLMClient, LLMError
 
-SCORERS = ("contains", "exact", "numeric", "regex", "judge")
+SCORERS = ("contains", "exact", "numeric", "regex", "judge", "jury")
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,7 @@ class ScoreResult:
     score: float
     passed: bool
     detail: str
+    votes: list[dict] | None = None  # jury: one {"model", "score", "passed", "reason"} or {"model", "error"}
 
 
 def render_expected(expected: str, today: date | None = None) -> str:
@@ -151,6 +155,60 @@ def score_judge(
     return ScoreResult(score, score >= 0.5, f"judge {judge_model}: {score:.2f} · {reason}")
 
 
+def _short(model: str) -> str:
+    return model.rsplit("/", 1)[-1][:28]
+
+
+def _juror(output: str, expected: str, question: str, llm: LLMClient, model: str) -> dict:
+    prompt = JUDGE_PROMPT.format(question=question, expected=expected, output=output[:4000])
+    last_error = ""
+    for _ in range(2):
+        try:
+            res = llm.chat(model, [{"role": "user", "content": prompt}], temperature=0.0, max_tokens=1500)
+        except LLMError as exc:
+            last_error = f"{exc.kind or 'error'}"
+            if not exc.retryable:
+                break
+            continue
+        match = re.search(r"\{.*\}", res.content or "", re.DOTALL)
+        try:
+            data = json.loads(match.group()) if match else None
+            score = max(0.0, min(1.0, float(data["score"])))
+        except (ValueError, TypeError, KeyError):
+            last_error = "unparseable reply"
+            continue
+        return {
+            "model": model,
+            "score": score,
+            "passed": score >= 0.5,
+            "reason": str(data.get("reason", ""))[:160],
+        }
+    return {"model": model, "error": last_error or "no reply"}
+
+
+def score_jury(
+    output: str, expected: str, question: str, llm: LLMClient | None, models: list[str]
+) -> ScoreResult:
+    """Majority vote of several judge models, asked in parallel; jurors that fail are left out."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    if llm is None or not models:
+        r = score_contains(output, expected)
+        return ScoreResult(r.score, r.passed, f"jury unavailable, fell back to contains: {r.detail}")
+    with ThreadPoolExecutor(max_workers=len(models)) as pool:
+        votes = list(pool.map(lambda m: _juror(output, expected, question, llm, m), models))
+    valid = [v for v in votes if "error" not in v]
+    if not valid:
+        r = score_contains(output, expected)
+        return ScoreResult(r.score, r.passed, f"every juror failed; contains: {r.detail}", votes)
+    passes = sum(v["passed"] for v in valid)
+    mean = sum(v["score"] for v in valid) / len(valid)
+    passed = passes * 2 > len(valid) or (passes * 2 == len(valid) and mean >= 0.5)
+    parts = [f"{_short(v['model'])} {'✓' if v['passed'] else '✗'}" for v in valid]
+    parts += [f"{_short(v['model'])} failed ({v['error']})" for v in votes if "error" in v]
+    return ScoreResult(mean, passed, f"jury {passes}/{len(valid)} pass · " + " · ".join(parts), votes)
+
+
 def score_output(
     output: str,
     *,
@@ -160,6 +218,7 @@ def score_output(
     question: str = "",
     judge: Callable[[str, str, str], ScoreResult] | None = None,
     today: date | None = None,
+    jury: Callable[[str, str, str], ScoreResult] | None = None,
 ) -> ScoreResult:
     """Score ``output`` with the named scorer. Empty output always fails."""
     if not output or not output.strip():
@@ -178,4 +237,9 @@ def score_output(
             r = score_contains(output, exp)
             return ScoreResult(r.score, r.passed, f"no judge configured, contains: {r.detail}")
         return judge(output, exp, question)
+    if scorer == "jury":
+        if jury is None:
+            r = score_contains(output, exp)
+            return ScoreResult(r.score, r.passed, f"no jury configured, contains: {r.detail}")
+        return jury(output, exp, question)
     return ScoreResult(0.0, False, f"unknown scorer '{scorer}'")

@@ -28,7 +28,7 @@ tasks:
   - key: compound-interest          # unique within the suite: [a-z0-9_-]
     prompt: "$1,000 at 5% compounded yearly for 10 years?"
     expected: "1628.89"
-    scorer: numeric                 # contains | exact | numeric | regex | judge
+    scorer: numeric                 # contains | exact | numeric | regex | judge | jury
     tolerance: 0.01                 # numeric only (absolute)
     category: word-problem          # free text, used for per-category accuracy
     time_sensitive: false
@@ -77,7 +77,8 @@ You can also add a YAML file to `seed/suites/` and restart; it then becomes a bu
 | `exact` | Normalised answer equals `expected` | Strips "The answer is" filler |
 | `numeric` | A number in the **final sentence containing a number** is within `tolerance` of `expected` | Handles `1,234`, `1 234`, `$1,628.89`, unicode minus and narrow spaces. Using the final sentence avoids false passes on intermediate numbers. |
 | `regex` | `re.search(expected, answer, IGNORECASE)` | |
-| `judge` | An LLM judge (`JUDGE_MODEL`, default `groq/openai/gpt-oss-120b`) gives a score ≥ 0.5 | Score 0–1 is kept as-is. Falls back to `contains` if the judge errors or replies without JSON, or in mock mode. The fallback is always noted in `score_detail`. |
+| `judge` | An LLM judge (`JUDGE_MODEL`, default `openrouter/anthropic/claude-sonnet-5.5`, from a lab the agents don't use) gives a score ≥ 0.5 | Score 0–1 is kept as-is. Falls back to `contains` if the judge errors or replies without JSON, or in mock mode. The fallback is always noted in `score_detail`. |
+| `jury` | Several judge models from different labs (`JURY_MODELS`: Claude Opus 5.5, Gemini 3.1 Pro, DeepSeek V4 Pro) vote; the majority decides | Score = the jurors' mean. Failed jurors are left out. Agreement (Fleiss' κ) and disputed tasks are reported per run. Works in mock mode too. See [statistics.md](statistics.md#the-jury-scorer-jury). |
 
 Placeholders in `expected`: `{{current_year}}`, `{{today_iso}}`, `{{today_weekday}}`, resolved at scoring time.
 An empty answer always fails. Each execution stores the scorer's explanation in `score_detail`

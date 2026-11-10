@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.agents.runtime import AgentSpec, RuntimeConfig, run_agent, save_execution
 from app.bench.pricing import PriceBook
-from app.bench.scoring import ScoreResult, render_expected, score_judge, score_output
+from app.bench.scoring import ScoreResult, render_expected, score_judge, score_jury, score_output
 from app.clients import LLMClient, MockLLMClient, SearchClient, clients_for
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker
@@ -241,6 +241,14 @@ class BenchmarkEngine:
 
         return judge
 
+    def _jury(self, ctx: _RunContext) -> Callable[[str, str, str], ScoreResult]:
+        """The jury runs in both modes (the mock LLM answers the judge prompt), so the demo shows it."""
+
+        def jury(output: str, expected: str, question: str) -> ScoreResult:
+            return score_jury(output, expected, question, ctx.llm, self.settings.jury)
+
+        return jury
+
     def _run_agent_tasks(
         self,
         ctx: _RunContext,
@@ -284,6 +292,7 @@ class BenchmarkEngine:
                     tolerance=task["tolerance"],
                     question=task["prompt"],
                     judge=judge,
+                    jury=self._jury(ctx),
                 )
                 cost, price_source = ctx.prices.cost(
                     spec.model, result.prompt_tokens, result.completion_tokens
@@ -300,6 +309,7 @@ class BenchmarkEngine:
                 execution.score = sr.score
                 execution.passed = sr.passed
                 execution.score_detail = f"{sr.detail} · price: {price_source}"
+                execution.jury = sr.votes
                 execution.cost_usd = cost
                 execution.recovered = result.had_failures and sr.passed
                 self._check_freshness(ctx, db, execution, task)

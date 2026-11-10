@@ -51,9 +51,10 @@ services:
       LLM_TIMEOUT_S: ${LLM_TIMEOUT_S:-120}
       SEARCH_TIMEOUT_S: ${SEARCH_TIMEOUT_S:-20}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
-      JUDGE_MODEL: ${JUDGE_MODEL:-groq/openai/gpt-oss-120b}
-      FRESHNESS_MODEL: ${FRESHNESS_MODEL:-groq/openai/gpt-oss-120b}
-      FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free}
+      JUDGE_MODEL: ${JUDGE_MODEL:-openrouter/anthropic/claude-sonnet-5.5}
+      JURY_MODELS: ${JURY_MODELS:-openrouter/anthropic/claude-opus-5.5,openrouter/google/gemini-3.1-pro-preview,openrouter/deepseek/deepseek-v4-pro}
+      FRESHNESS_MODEL: ${FRESHNESS_MODEL:-openrouter/anthropic/claude-sonnet-5.5}
+      FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b,openrouter/nvidia/nemotron-3.5-lightning:free}
       FRESHNESS_SEARCH_DEPTH: ${FRESHNESS_SEARCH_DEPTH:-advanced}
       # Model connections: encryption secret for stored API keys (generated into the volume if empty),
       # and "localhost" in a connection URL means your machine, not the container.

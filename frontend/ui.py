@@ -254,6 +254,33 @@ def run_label(r: dict) -> str:
     )
 
 
+def ci_text(ci: list[float] | None) -> str:
+    return f"{ci[0] * 100:.0f}–{ci[1] * 100:.0f}%" if ci else "–"
+
+
+def tier_text(row: dict) -> str:
+    """'1' or '1 · tie': agents in one tier are not significantly different."""
+    if not row.get("tier"):
+        return "–"
+    return f"{row['tier']} · tie" if row.get("tied_with") else str(row["tier"])
+
+
+def statistics_caption(data: dict) -> str:
+    st_ = data.get("statistics") or {}
+    note = st_.get("power_note") or ""
+    caption = (
+        f"{note} **Tier**: agents in the same tier are not significantly different "
+        f"({st_.get('method', 'bootstrap')}, p ≥ 0.05). See docs/statistics.md."
+    )
+    board = data.get("leaderboard") or []
+    if any(r.get("reliability_score") is not None and not r.get("reliability_ci") for r in board):
+        caption += (
+            " A **95% CI** of – means every resample gave the same score (e.g. every answer passed), "
+            "so no interval can be estimated."
+        )
+    return caption
+
+
 def leaderboard_frame(board: list[dict]):
     import pandas as pd
 
@@ -266,6 +293,8 @@ def leaderboard_frame(board: list[dict]):
                 "Model": r["model"],
                 "Route": route_badge(r.get("route"), r.get("connection")),
                 "Reliability": pct(r["reliability_score"]),
+                "95% CI": ci_text(r.get("reliability_ci")),
+                "Tier": tier_text(r),
                 "Accuracy": pct(r["accuracy"]),
                 "Consistency": pct(r["consistency"]),
                 "Recovery": pct(r["recovery_rate"]),

@@ -465,6 +465,30 @@ def test_suites_page_custom_suite_and_scorer_preview():
     assert any("✅ Pass" in s.value for s in at.success)
 
 
+def test_suites_page_jury_task_in_scorer_preview():
+    """Regression: picking a jury-scored task in 'Test a scorer' crashed the page (ValueError)."""
+    suite = requests.post(
+        f"{BACKEND}/suites",
+        json={
+            "name": f"UI jury {uuid.uuid4().hex[:6]}",
+            "tasks": [{"key": "peru", "prompt": "Capital of Peru?", "expected": "Lima", "scorer": "jury"}],
+        },
+        timeout=10,
+    ).json()
+    at = AppTest.from_file(str(FRONTEND / "pages/3_Suites.py"), default_timeout=TIMEOUT)
+    at.query_params["suite"] = str(suite["id"])
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    pick = next(s for s in at.selectbox if s.label == "Task")
+    pick.set_value(next(o for o in pick.options if o.startswith("peru:"))).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert next(s for s in at.selectbox if s.label == "Scorer").value == "jury"
+    next(t for t in at.text_area if t.label == "Sample answer").set_value("It is Lima.").run()
+    next(b for b in at.button if b.label == "Score it").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("preview only" in s.value for s in at.success)
+
+
 def test_run_benchmark_preselects_suite_being_edited():
     suite = _custom_suite()
     at = AppTest.from_file(str(FRONTEND / "pages/4_Run_Benchmark.py"), default_timeout=TIMEOUT)

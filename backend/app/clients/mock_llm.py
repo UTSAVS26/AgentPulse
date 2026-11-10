@@ -30,6 +30,7 @@ from typing import Any
 
 from app.clients.llm import LLMError, LLMResponse, ToolCall
 from app.clients.mock_freshness import freshness_responder
+from app.clients.mock_judge import judge_responder
 
 Responder = Callable[[str, list[dict[str, Any]], random.Random], str | None]
 
@@ -115,7 +116,7 @@ class MockLLMClient:
         self.answer_key = {_normalize(k): v for k, v in (answer_key or {}).items()}
         self.stale_key: dict[str, str] = {}
         # The stale-answer detector's prompts are always answered (see mock_freshness).
-        self.responders: list[Responder] = [freshness_responder, *(responders or [])]
+        self.responders: list[Responder] = [freshness_responder, judge_responder, *(responders or [])]
         self.failure_rate_override = failure_rate_override
         self._calls: dict[str, int] = {}
         self._lock = threading.Lock()

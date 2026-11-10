@@ -32,14 +32,28 @@ class Settings(BaseSettings):
     live_access_code: str = ""
     """If set while MOCK_MODE=true, requests with header `X-Access-Code: <code>` run live (public demo)."""
 
-    judge_model: str = "groq/openai/gpt-oss-120b"
+    # Judges are deliberately NOT the benchmarked agents' models (OpenAI gpt-oss, Qwen, NVIDIA Nemotron,
+    # IBM Granite): a model grading its own family's answers is biased. They are strong frontier reasoners
+    # from other labs, verified to grade a known pass and a known fail correctly (docs/statistics.md).
+    judge_model: str = "openrouter/anthropic/claude-sonnet-5.5"
     """Model used by the `judge` scorer (live mode only)."""
 
-    freshness_model: str = "groq/openai/gpt-oss-120b"
+    jury_models: str = (
+        "openrouter/anthropic/claude-opus-5.5,openrouter/google/gemini-3.1-pro-preview,"
+        "openrouter/deepseek/deepseek-v4-pro"
+    )
+    """Comma-separated judge models for the `jury` scorer: three labs (Anthropic, Google, DeepSeek), none of
+    them used by the default agents. Add your own connections (``custom/<slug>/<model>``) if you like."""
+
+    @property
+    def jury(self) -> list[str]:
+        return list(dict.fromkeys(m.strip() for m in self.jury_models.split(",") if m.strip()))
+
+    freshness_model: str = "openrouter/anthropic/claude-sonnet-5.5"
     """Model that extracts claims and judges them against Tavily sources (stale-answer detector)."""
 
     freshness_fallback_models: str = (
-        "groq/openai/gpt-oss-20b,groq/qwen/qwen3.8-27b,openrouter/nvidia/nemotron-3.5-lightning:free"
+        "groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b,openrouter/nvidia/nemotron-3.5-lightning:free"
     )
     """Comma-separated models tried in order when the main one is rate-limited or failing (each Groq
     model has its own daily token quota; the OpenRouter free model is a different provider altogether)."""

@@ -169,6 +169,17 @@ def test_public_deployment_allows_public_ips_and_local_allows_private():
     )
 
 
+@pytest.mark.parametrize(
+    "url", ["http://169.254.169.254/latest", "http://metadata.google.internal/v1", "http://[fe80::1]:80/v1"]
+)
+def test_cloud_metadata_blocked_even_where_private_endpoints_are_allowed(url):
+    local = Settings(mock_mode=False)  # private endpoints allowed (local Ollama, LAN servers)
+    assert net_guard.private_allowed(local)
+    with pytest.raises(net_guard.UnsafeURL, match="metadata|link-local"):
+        net_guard.check(url, local)
+    assert net_guard.check("http://192.168.1.10:1234/v1", local).url == "http://192.168.1.10:1234/v1"
+
+
 def test_unresolvable_host_rejected_on_public(monkeypatch):
     with pytest.raises(net_guard.UnsafeURL, match="can't resolve"):
         net_guard.check("https://no-such-host.invalid/v1", PUBLIC)

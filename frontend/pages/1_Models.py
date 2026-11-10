@@ -45,9 +45,11 @@ def _show_test(res: dict) -> None:
     if res.get("models") is not None:
         st.success(f"✅ Reached `{res['base_url']}`: {len(res['models'])} models listed.")
     elif res.get("models_error"):
-        st.warning(
-            f"Couldn't list models ({res['models_error']}). Some servers don't support it: type the name."
-        )
+        err = res["models_error"]
+        if any(k in err for k in ("nothing is answering", "unknown host", "TLS/certificate")):
+            st.error(f"❌ Couldn't reach the endpoint: {err.removeprefix('could not list models: ')}")
+        else:
+            st.warning(f"Couldn't list models ({err}). Some servers don't support it: type the name.")
     if res.get("chat_ok"):
         st.success(f"✅ `{res['model']}` answered in {res['chat_latency_ms']:.0f} ms: “{res['chat_reply']}”")
         if res.get("tools_ok"):
