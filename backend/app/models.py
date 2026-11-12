@@ -32,6 +32,8 @@ class Agent(Base):
     tools: Mapped[list[str]] = mapped_column(JSON, default=list)
     temperature: Mapped[float] = mapped_column(Float, default=0.0)
     max_steps: Mapped[int] = mapped_column(Integer, default=6)
+    fallbacks: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    """Models Bifrost tries in order when this agent's model fails (provider outage, rate limit...)."""
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -87,6 +89,10 @@ class BenchmarkRun(Base):
     fault_rate: Mapped[float] = mapped_column(Float, default=0.0)
     mock_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     check_freshness: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=True)
+    outage_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """Outage drill: share of model calls the chaos provider fails (0 = no drill)."""
+    drill_fallbacks: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    """Outage drill: whether Bifrost fallbacks may rescue the failed calls."""
     """Run the stale-answer detector on answers to time-sensitive tasks."""
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|running|done|failed
     progress_done: Mapped[int] = mapped_column(Integer, default=0)
@@ -131,6 +137,10 @@ class TaskExecution(Base):
     freshness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     freshness_verdict: Mapped[str | None] = mapped_column(String(20), nullable=True)
     jury: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)  # jury scorer votes
+    fallback_calls: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )  # answered by a Bifrost fallback
+    gateway_ms: Mapped[float | None] = mapped_column(Float, nullable=True)  # Bifrost's own time, all calls
     # fresh|stale|wrong|unverified|timeless|no_claims; NULL = not checked
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -177,6 +187,9 @@ class FreshnessCheck(Base):
         String(20), nullable=True
     )  # text | execution | benchmark | guard
     model: Mapped[str | None] = mapped_column(String(200), nullable=True)  # guard: the model that answered
+    caller: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )  # guard: key:<name> | oidc:<user> | ...
     guard_action: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )  # guard: annotated|corrected|blocked
@@ -240,3 +253,31 @@ class ModelConnection(Base):
     last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class GatewaySecret(Base):
+    """A secret created on the dashboard and stored encrypted (e.g. the outage-drill provider's token)."""
+
+    __tablename__ = "gateway_secrets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    value_enc: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GuardKey(Base):
+    """A Freshness Guard API key. Only the SHA-256 hash of the secret is stored; the secret is shown once."""
+
+    __tablename__ = "guard_keys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(20))  # "apg_" + 6 chars, to recognise a key in lists
+    scopes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    rpm: Mapped[int] = mapped_column(Integer, default=60)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

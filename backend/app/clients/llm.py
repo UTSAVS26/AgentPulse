@@ -42,6 +42,17 @@ class LLMResponse:
     model: str = ""
     provider: str = ""
     finish_reason: str = ""
+    fallback_used: bool = False
+    """Bifrost answered with a fallback model because the primary failed (``routing_info.is_fallback``)."""
+    primary_provider: str = ""
+    upstream_latency_ms: float | None = None
+    """The provider's own time as Bifrost measured it: ``latency_ms − upstream`` is the gateway's overhead."""
+
+    @property
+    def gateway_overhead_ms(self) -> float | None:
+        if self.upstream_latency_ms is None:
+            return None
+        return max(0.0, self.latency_ms - self.upstream_latency_ms)
 
     @property
     def total_tokens(self) -> int:
@@ -87,6 +98,7 @@ class LLMClient(Protocol):
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        fallbacks: list[str] | None = None,
     ) -> LLMResponse: ...
 
     def list_models(self) -> list[str]: ...
@@ -145,6 +157,8 @@ def parse_completion(body: dict[str, Any], requested_model: str, latency_ms: flo
     ]
     usage = body.get("usage") or {}
     extra = body.get("extra_fields") or {}
+    routing = extra.get("routing_info") or {}
+    upstream = extra.get("upstream_latency")
     return LLMResponse(
         content=message.get("content") or "",
         tool_calls=tool_calls,
@@ -152,8 +166,11 @@ def parse_completion(body: dict[str, Any], requested_model: str, latency_ms: flo
         completion_tokens=int(usage.get("completion_tokens") or 0),
         latency_ms=latency_ms,
         model=requested_model,
-        provider=str(extra.get("provider") or requested_model.split("/", 1)[0]),
+        provider=str(routing.get("provider") or extra.get("provider") or requested_model.split("/", 1)[0]),
         finish_reason=choice.get("finish_reason") or "",
+        fallback_used=bool(routing.get("is_fallback")),
+        primary_provider=str(routing.get("primary_provider") or ""),
+        upstream_latency_ms=float(upstream) if isinstance(upstream, int | float) else None,
     )
 
 
@@ -199,16 +216,17 @@ class OpenAICompatibleClient:
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        fallbacks: list[str] | None = None,
     ) -> LLMResponse:
         try:
-            return self._chat_once(model, messages, tools, temperature, max_tokens)
+            return self._chat_once(model, messages, tools, temperature, max_tokens, fallbacks)
         except LLMError as exc:
             budget = affordable_budget(exc, max_tokens)
             if budget is None:
                 raise
             # Low prepaid balance: the provider reserves credit for the whole max_tokens up front and
             # names what it can afford. A judge verdict needs ~200 tokens, so retry once within budget.
-            return self._chat_once(model, messages, tools, temperature, budget)
+            return self._chat_once(model, messages, tools, temperature, budget, fallbacks)
 
     def _chat_once(
         self,
@@ -217,6 +235,7 @@ class OpenAICompatibleClient:
         tools: list[dict[str, Any]] | None,
         temperature: float,
         max_tokens: int | None,
+        fallbacks: list[str] | None = None,
     ) -> LLMResponse:
         payload: dict[str, Any] = {"model": model, "messages": messages, "temperature": temperature}
         if tools:
@@ -224,6 +243,8 @@ class OpenAICompatibleClient:
             payload["tool_choice"] = "auto"
         if max_tokens:
             payload["max_tokens"] = max_tokens
+        if fallbacks:
+            payload["fallbacks"] = list(fallbacks)  # Bifrost: tried in order when the primary fails
 
         started = time.perf_counter()
         try:

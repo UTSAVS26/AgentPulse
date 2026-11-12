@@ -192,6 +192,7 @@ class MockSearchClient:
                 query=query,
                 results=[_news_result(it, 0.9 - i * 0.05) for i, it in enumerate(items[:max_results])],
                 latency_ms=latency_ms,
+                route="mock",
             )
         news = mock_news.find_item(query, today)
         entry = None if news else find_entry(query)
@@ -227,6 +228,7 @@ class MockSearchClient:
             answer=answer if include_answer else None,
             results=results[:max_results],
             latency_ms=latency_ms,
+            route="mock",
         )
 
 

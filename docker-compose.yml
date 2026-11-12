@@ -26,6 +26,9 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       # Unlocks Bifrost's management API (runtime provider registration). Shared with the backend.
       BIFROST_SETUP_TOKEN: ${BIFROST_SETUP_TOKEN:-}
+      # Tavily's MCP server (web search through the gateway) and the outage-drill provider's key
+      TAVILY_AUTH: Bearer ${TAVILY_API_KEY:-}
+      CHAOS_TOKEN: ${CHAOS_TOKEN:-agentpulse-chaos}
     volumes:
       - bifrost-data:/app/data
       - ./bifrost/config.json:/app/data/config.json:ro
@@ -56,6 +59,14 @@ services:
       FRESHNESS_MODEL: ${FRESHNESS_MODEL:-openrouter/anthropic/claude-sonnet-5.5}
       FRESHNESS_FALLBACK_MODELS: ${FRESHNESS_FALLBACK_MODELS:-groq/openai/gpt-oss-120b,groq/openai/gpt-oss-20b,openrouter/nvidia/nemotron-3.5-lightning:free}
       FRESHNESS_SEARCH_DEPTH: ${FRESHNESS_SEARCH_DEPTH:-advanced}
+      # Deeper Bifrost use (docs/bifrost.md): web search via Bifrost's MCP gateway; outage-drill provider key
+      WEB_SEARCH_VIA: ${WEB_SEARCH_VIA:-bifrost-mcp}
+      # Freshness Guard access (docs/guard.md): open | required, optional OIDC ID tokens
+      GUARD_AUTH: ${GUARD_AUTH:-open}
+      GUARD_OIDC_ISSUER: ${GUARD_OIDC_ISSUER:-}
+      GUARD_OIDC_AUDIENCE: ${GUARD_OIDC_AUDIENCE:-}
+      GUARD_OIDC_SCOPES_CLAIM: ${GUARD_OIDC_SCOPES_CLAIM:-scope}
+      CHAOS_TOKEN: ${CHAOS_TOKEN:-agentpulse-chaos}
       # Live Freshness Bench (docs/freshbench.md): questions per cell, optional daily pulse, drift alert
       FRESHBENCH_PER_CELL: ${FRESHBENCH_PER_CELL:-2}
       FRESHBENCH_PULSE_HOUR_UTC: ${FRESHBENCH_PULSE_HOUR_UTC:-}

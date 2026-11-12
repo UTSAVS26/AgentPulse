@@ -22,6 +22,7 @@ def save_check(
     source: str = "text",
     model: str | None = None,
     guard_action: str | None = None,
+    caller: str | None = None,
 ) -> FreshnessCheck:
     """Add a check and its claims to the session and flush (the caller commits)."""
     check = FreshnessCheck(
@@ -35,6 +36,7 @@ def save_check(
         source=source,
         model=model,
         guard_action=guard_action,
+        caller=caller,
         latency_ms=round(result.latency_ms, 1),
         status="done",
         claims=[
@@ -77,6 +79,7 @@ def _base(check: FreshnessCheck) -> dict:
         "source": check.source,
         "model": check.model,
         "guard_action": check.guard_action,
+        "caller": check.caller,
         "latency_ms": check.latency_ms,
         "created_at": check.created_at,
         "counts": _counts(check),

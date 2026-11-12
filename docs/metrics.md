@@ -64,6 +64,14 @@ Answers to ⏰ time-sensitive tasks are checked by the [stale-answer detector](s
 Freshness is reported **next to** the reliability score, not inside it, so the reliability weights stay
 comparable across suites with and without time-sensitive tasks.
 
+## Bifrost: fallbacks and gateway overhead
+
+Per agent: `llm_calls` (model calls), `fallback_calls` and `fallback_rate` (calls Bifrost answered with a
+fallback model), `rescued_by_gateway` (executions that finished `ok` thanks to a fallback), `outage_failures`
+(executions lost to a simulated outage), and `gateway_overhead_ms_p50` / `_p95` (Bifrost's own time per model
+call: measured minus the provider's reported latency; `null` when not reported). Runs started with an outage
+drill record `outage_rate` and `drill_fallbacks`. See [bifrost.md](bifrost.md#deeper-use-fallbacks-overhead-and-the-mcp-gateway).
+
 ## Uncertainty and tiers
 
 Every leaderboard row also carries `accuracy_ci` (Wilson), `reliability_ci` (paired task-level bootstrap),

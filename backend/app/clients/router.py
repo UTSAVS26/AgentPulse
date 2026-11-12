@@ -179,11 +179,13 @@ class ModelRouter:
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        fallbacks: list[str] | None = None,
     ) -> LLMResponse:
         parsed = parse_custom(model)
         if parsed is None:
+            extra = {"fallbacks": fallbacks} if fallbacks else {}
             return self.bifrost.chat(
-                model, messages, tools=tools, temperature=temperature, max_tokens=max_tokens
+                model, messages, tools=tools, temperature=temperature, max_tokens=max_tokens, **extra
             )
         slug, name = parsed
         res = self.registry.client(slug).chat(

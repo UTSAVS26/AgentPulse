@@ -50,6 +50,8 @@ class AgentSpec:
     tools: list[str] = field(default_factory=list)
     temperature: float = 0.0
     max_steps: int = 6
+    fallbacks: list[str] = field(default_factory=list)
+    """Models Bifrost tries, in order, when the primary fails (request-level ``fallbacks``)."""
 
     @classmethod
     def from_model(cls, agent: Any) -> AgentSpec:
@@ -60,6 +62,7 @@ class AgentSpec:
             tools=list(agent.tools or []),
             temperature=agent.temperature,
             max_steps=agent.max_steps,
+            fallbacks=list(getattr(agent, "fallbacks", None) or []),
         )
 
 
@@ -86,6 +89,10 @@ class AgentResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     latency_ms: float = 0.0
+    fallback_calls: int = 0
+    """Model calls Bifrost answered with a fallback model after the primary failed."""
+    gateway_ms: float | None = None
+    """Bifrost's own time over all model calls (measured minus provider latency); None if not reported."""
 
     @property
     def total_tokens(self) -> int:
@@ -116,6 +123,10 @@ class RuntimeConfig:
     sleep_scale: float = 1.0
     """Multiplier on real backoff sleeps (0 in tests, the mock latency scale in mock mode)."""
     max_tokens: int | None = 1024
+    route_model: str | None = None
+    """Model id actually called, when it differs from the agent's (outage drills: ``chaos/r40/<model>``)."""
+    fallbacks: list[str] | None = None
+    """Overrides the agent's fallbacks (an outage drill without fallbacks passes ``[]``)."""
 
 
 def _preview(text: str, limit: int = 2000) -> str:
@@ -167,12 +178,25 @@ def run_agent(
         result.prompt_tokens += response.prompt_tokens
         result.completion_tokens += response.completion_tokens
         last_content = response.content or last_content
+        overhead = response.gateway_overhead_ms
+        if overhead is not None:
+            result.gateway_ms = (result.gateway_ms or 0.0) + overhead
+        if response.fallback_used:
+            result.fallback_calls += 1
+        route: dict[str, Any] = {}
+        if cfg.route_model:
+            route["route_model"] = cfg.route_model
+        if response.fallback_used:
+            route.update(fallback=True, primary_provider=response.primary_provider)
+        if overhead is not None:
+            route["gateway_ms"] = round(overhead, 1)
         add(
             StepRecord(
                 type="llm_call",
                 payload={
                     "model": spec.model,
                     "provider": response.provider,
+                    **route,
                     "content": _preview(response.content),
                     "tool_calls": [
                         {"name": tc.name, "arguments": tc.arguments} for tc in response.tool_calls
@@ -242,14 +266,17 @@ def _call_llm_with_retries(
     sleep: Callable[[float], None],
 ) -> LLMResponse | None:
     attempt = 0
+    fallbacks = spec.fallbacks if cfg.fallbacks is None else cfg.fallbacks
+    extra = {"fallbacks": fallbacks} if fallbacks else {}  # only for clients that support it
     while True:
         try:
             return llm.chat(
-                spec.model,
+                cfg.route_model or spec.model,
                 messages,
                 tools=tools or None,
                 temperature=spec.temperature,
                 max_tokens=cfg.max_tokens,
+                **extra,
             )
         except LLMError as exc:
             add(
@@ -331,7 +358,10 @@ def _execute_tool(
         ok = False
         result.tool_errors += 1
     latency = (time.perf_counter() - started) * 1000
-    return content, {"ok": ok, "content": _preview(content)}, latency
+    payload: dict[str, Any] = {"ok": ok, "content": _preview(content)}
+    if name == "web_search" and ctx.search_route:
+        payload["via"] = ctx.search_route  # rest | bifrost-mcp | mock (and why MCP was skipped)
+    return content, payload, latency
 
 
 def save_execution(
@@ -362,6 +392,8 @@ def save_execution(
         retries=result.retries,
         tool_errors=result.tool_errors,
         recovered=result.recovered,
+        fallback_calls=result.fallback_calls,
+        gateway_ms=None if result.gateway_ms is None else round(result.gateway_ms, 1),
         error=result.error,
         trace=[
             TraceStep(

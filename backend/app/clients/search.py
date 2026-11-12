@@ -40,6 +40,9 @@ class SearchResponse:
     answer: str | None = None
     results: list[SearchResult] = field(default_factory=list)
     latency_ms: float = 0.0
+    route: str = "rest"
+    """How the search went out: ``rest`` (Tavily API), ``bifrost-mcp`` (Tavily's MCP server through Bifrost),
+    ``mock``; a REST fallback says why MCP was skipped."""
 
     def to_dict(self) -> dict[str, Any]:
         return {

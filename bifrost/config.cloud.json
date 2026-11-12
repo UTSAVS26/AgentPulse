@@ -19,7 +19,9 @@
         {
           "name": "groq-primary",
           "value": "env.GROQ_API_KEY",
-          "models": ["*"],
+          "models": [
+            "*"
+          ],
           "weight": 1.0
         }
       ]
@@ -29,10 +31,37 @@
         {
           "name": "openrouter-primary",
           "value": "env.OPENROUTER_API_KEY",
-          "models": ["*"],
+          "models": [
+            "*"
+          ],
           "weight": 1.0
         }
       ]
+    },
+    "chaos": {
+      "keys": [
+        {
+          "name": "chaos-key",
+          "value": "env.CHAOS_TOKEN",
+          "models": [
+            "*"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "network_config": {
+        "base_url": "http://127.0.0.1:8000/chaos",
+        "allow_private_network": true,
+        "max_retries": 0
+      },
+      "custom_provider_config": {
+        "base_provider_type": "openai",
+        "allowed_requests": {
+          "chat_completion": true,
+          "chat_completion_stream": false,
+          "list_models": false
+        }
+      }
     }
   }
 }

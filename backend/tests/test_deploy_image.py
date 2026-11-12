@@ -44,8 +44,11 @@ def test_start_script_is_lf_and_uses_platform_port():
 
 def test_cloud_bifrost_config_has_no_local_providers_and_no_inline_secrets():
     cfg = json.loads((ROOT / "bifrost" / "config.cloud.json").read_text(encoding="utf-8"))
-    assert set(cfg["providers"]) == {"groq", "openrouter"}
+    assert set(cfg["providers"]) == {"groq", "openrouter", "chaos"}  # no local providers (Ollama)
     assert all(k["value"].startswith("env.") for p in cfg["providers"].values() for k in p["keys"])
+    # the outage-drill provider is the container's own backend; no MCP (it needs the disabled config store)
+    assert cfg["providers"]["chaos"]["network_config"]["base_url"] == "http://127.0.0.1:8000/chaos"
+    assert "mcp" not in cfg and "WEB_SEARCH_VIA=rest" in DOCKERFILE.read_text(encoding="utf-8")
 
 
 def test_render_blueprint():
@@ -61,6 +64,7 @@ def test_render_blueprint():
     for secret in ("LIVE_ACCESS_CODE", "GROQ_API_KEY", "OPENROUTER_API_KEY", "TAVILY_API_KEY"):
         assert env[secret] == {"key": secret, "sync": False}, f"{secret} must be prompted, never committed"
     assert env["APP_SECRET"] == {"key": "APP_SECRET", "generateValue": True}  # encrypts stored model keys
+    assert env["CHAOS_TOKEN"] == {"key": "CHAOS_TOKEN", "generateValue": True}  # random, never the default
     # An empty DATABASE_URL would override the image's SQLite default, so it must not be declared here.
     assert "DATABASE_URL" not in env
 

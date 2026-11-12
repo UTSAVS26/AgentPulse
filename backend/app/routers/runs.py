@@ -63,6 +63,8 @@ def run_out(db: Session, run: BenchmarkRun) -> RunOut:
         fault_rate=run.fault_rate,
         mock_mode=run.mock_mode,
         check_freshness=run.check_freshness,
+        outage_rate=run.outage_rate,
+        drill_fallbacks=run.drill_fallbacks,
         status=run.status,
         progress_done=run.progress_done,
         progress_total=run.progress_total,
@@ -99,6 +101,8 @@ def create_run(
             fault_rate=body.fault_rate,
             live=mode.live,
             check_freshness=body.check_freshness,
+            outage_rate=body.outage_rate,
+            drill_fallbacks=body.drill_fallbacks,
         )
     except RunValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

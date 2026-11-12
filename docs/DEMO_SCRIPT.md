@@ -1,7 +1,8 @@
-# Demo script (4–5 minutes)
+# Demo script (4–5 minutes, plus the v3 add-ons)
 
 A click path through the whole product, with what to say at each step. It works in **mock mode** with no keys
-or network. Steps 4b and 6b show the **live** extras when keys and quota are available.
+or network. Steps 4b and 6b show the **live** extras when keys and quota are available. **Steps 4c, 5b, 5c and 6c
+are the v3 additions**: pick two or three for a short slot, or add them all for a 9-minute walk-through.
 
 ## Before you start (5 minutes, the day before and again 30 minutes before)
 
@@ -76,6 +77,16 @@ While it runs (about 20 s in mock mode), point at the partial leaderboard.
 
 **4b (live)**: in a live run, the stale rows cite real news articles with dates.
 
+### 4c. Is the ranking real? (30 s, v3.1)
+Back on **Compare** → the leaderboard.
+> "Most gaps between agents are noise at this sample size, so every score has a 95% interval and a *tier*:
+> agents whose difference could be luck share a tier. Here the top three are statistically tied, and AgentPulse
+> says so instead of crowning one."
+
+Point at the **95% CI** and **Tier** columns, the error bars, and the *"statistically tied"* note on the
+*Most reliable* tile. For a free-text suite use the **`jury`** scorer: three judge models from different labs vote
+(Fleiss κ and the most disputed tasks are shown), because no single judge should be ground truth.
+
 ### 5. Stale-Answer Detector (60 s)
 You land on the answer from **why ↗**: *"Keir Starmer"* is ⚠️ outdated, and **True today** says Andy
 Burnham, with sources newest first.
@@ -91,10 +102,46 @@ Switch to **Paste text** and load the example **A stale answer**, then **Check f
 **6b (live)**: paste anything topical from today's news. Results come back in 5–15 s with real dated
 sources.
 
+### 5b. Live Freshness Bench (90 s, v3.2, the flagship)
+**📡 Freshness Bench** → **Generate today's bench** (mock: instant; live: about a minute for 12 cells), then
+**Show all questions with their sources**.
+> "A benchmark that can't be memorised, because it didn't exist yesterday. Tavily finds dated news from this week
+> back to two years ago, a model writes one question per article, and a second check throws out questions the
+> article doesn't support."
+
+**Run this bench** (the default pair is GPT-OSS 120B with and without tools), then read **Knowledge cutoff**:
+> "Accuracy by event age. The agent without tools falls off a cliff at its *effective knowledge cutoff*; the
+> same model with web search stays flat. This measures what a model actually knows, not what its model card says."
+
+### 5c. Freshness Guard (90 s, v3.3 and v3.4)
+**🛡️ Freshness Guard** → pick *"Who is the current prime minister of the United Kingdom?"* and send it in
+**Annotate**, then **Correct**, then **Block**.
+> "Any app that uses an OpenAI SDK changes one line, its base URL, and every answer is fact-checked on the way
+> through: annotated, rewritten from dated sources with citations, or blocked."
+
+Open **🔐 Access**: issue a key with only `guard:annotate`, paste it into *Call as*, switch to **Block** and send.
+> "That key may annotate but not block: a 403. Callers use API keys, OIDC ID tokens from your identity provider,
+> or the access code, each with scopes and a rate limit."
+
+From a terminal: `python scripts/guard_demo.py` (plain OpenAI SDK, three modes).
+
 ### 6. Traces (30 s)
 Open a trace from Compare → *Failures & recovery* → **open ↗**.
 > "Every model call, tool call, fault and retry, with tokens and latency. The timeline shows where the time
 > went: those red bars are injected 5-second timeouts."
+
+### 6c. Bifrost, deeper (60 s, v3.4)
+**Run Benchmark** → *Factual QA*, two agents → **🌩️ Provider outage drill**: 50% outage, **Bifrost fallbacks on**,
+start. Then **Compare** → **🛰️ Gateway**.
+> "Half of every agent's model calls now hit a simulated provider outage. Bifrost's own fallback machinery
+> retries them on a backup model: 'rescued by Bifrost' counts the answers that would otherwise have been lost.
+> Run it again with fallbacks off to see the difference. Bifrost's own overhead is about 5 milliseconds per call."
+
+In **Traces**, point at *"🛟 rescued by a Bifrost fallback (chaos → groq)"* and *"via 🛰️ Bifrost MCP (Tavily)"*:
+> "Even web search goes through the gateway, as a tool call over MCP, so one gateway carries every call."
+
+Optional: **🔑 Create or change the drill token** (the secret only Bifrost may use to trigger the chaos
+provider; stored encrypted and pushed into Bifrost at runtime).
 
 ### 7. Reports (20 s)
 Download the **Markdown report** and show the preview.
@@ -115,3 +162,6 @@ Download the **Markdown report** and show the preview.
 | Dashboard shows "Cannot reach the backend" | `make restart`, then `make health` | ~30 s |
 | Docker itself broken | Use the public deployment (mock by default, live with the access code) | — |
 | Empty dashboard | `make reset && make up`; demo data is re-seeded within a minute | ~2 min |
+| Live bench generation is slow or out of credit | Use a smaller bench (2 categories × 6 ages), or the demo bench that is already in mock mode | < 1 min |
+| Guard says "Mock mode" | Expected without keys: the simulated model answers demo topics from old training data, so there is something to catch | — |
+| Outage drill shows no rescues | Make sure *Bifrost fallbacks on* is ticked and the outage is at least 30%; in live mode, Bifrost must be running | — |

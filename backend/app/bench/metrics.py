@@ -31,6 +31,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from app.clients.chaos import OUTAGE_MESSAGE
+
 RELIABILITY_WEIGHTS: dict[str, float] = {
     "accuracy": 0.40,
     "consistency": 0.25,
@@ -65,6 +67,9 @@ class ExecRecord:
     freshness_score: float | None = None
     freshness_verdict: str | None = None
     jury: tuple[bool, ...] | None = None  # each juror's pass/fail (scorer: jury)
+    fallback_calls: int = 0  # model calls answered by a Bifrost fallback
+    gateway_ms: float | None = None  # Bifrost's own time over the execution's model calls
+    error: str | None = None
 
     @property
     def had_failure(self) -> bool:
@@ -92,6 +97,9 @@ class ExecRecord:
             freshness_score=getattr(e, "freshness_score", None),
             freshness_verdict=getattr(e, "freshness_verdict", None),
             jury=_jury_votes(getattr(e, "jury", None)),
+            fallback_calls=getattr(e, "fallback_calls", None) or 0,
+            gateway_ms=getattr(e, "gateway_ms", None),
+            error=getattr(e, "error", None),
         )
 
 
@@ -185,6 +193,10 @@ def agent_metrics(records: Sequence[ExecRecord]) -> dict[str, Any]:
     checked = [r for r in records if r.freshness_verdict]
     verdicts = Counter(r.freshness_verdict for r in checked)
 
+    llm_calls = sum(r.steps for r in records)
+    fallback_calls = sum(r.fallback_calls for r in records)
+    per_call_overhead = [r.gateway_ms / r.steps for r in records if r.gateway_ms is not None and r.steps]
+
     return {
         "executions": n,
         "passed": passed,
@@ -217,6 +229,14 @@ def agent_metrics(records: Sequence[ExecRecord]) -> dict[str, Any]:
         "stale_answers": verdicts.get("stale", 0),
         "stale_rate": _ratio(verdicts.get("stale", 0), len(checked)),
         "freshness_verdicts": {v: verdicts.get(v, 0) for v in FRESHNESS_VERDICTS},
+        # Bifrost: fallbacks (outage drills or real outages) and the gateway's own overhead per model call
+        "llm_calls": llm_calls,
+        "fallback_calls": fallback_calls,
+        "fallback_rate": _ratio(fallback_calls, llm_calls),
+        "rescued_by_gateway": sum(r.status == "ok" and r.fallback_calls > 0 for r in records),
+        "outage_failures": sum(r.status == "error" and OUTAGE_MESSAGE in (r.error or "") for r in records),
+        "gateway_overhead_ms_p50": percentile(per_call_overhead, 50),
+        "gateway_overhead_ms_p95": percentile(per_call_overhead, 95),
     }
 
 

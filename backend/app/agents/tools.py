@@ -27,6 +27,8 @@ class ToolError(Exception):
 class ToolContext:
     search: SearchClient
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
+    search_route: str | None = None
+    """How the last web search went out (``rest``, ``bifrost-mcp``, ``mock``): shown on the trace."""
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ def _web_search(args: dict[str, Any], ctx: ToolContext) -> str:
         res = ctx.search.search(query, max_results=4, topic="general", include_answer=True)
     except SearchError as exc:
         raise ToolError(f"search failed: {exc.message}") from exc
+    ctx.search_route = res.route
     if not res.results and not res.answer:
         return "No results found."
     lines = []

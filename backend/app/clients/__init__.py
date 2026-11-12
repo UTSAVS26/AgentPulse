@@ -73,9 +73,17 @@ def get_live_llm() -> ModelRouter:
 
 
 @lru_cache
-def get_live_search() -> TavilySearchClient:
+def get_live_search() -> SearchClient:
+    """Tavily: through Bifrost's MCP gateway (``WEB_SEARCH_VIA=bifrost-mcp``, REST as fallback) or REST."""
     s = get_settings()
-    return TavilySearchClient(s.tavily_api_key, timeout_s=s.search_timeout_s)
+    rest = TavilySearchClient(s.tavily_api_key, timeout_s=s.search_timeout_s)
+    if s.web_search_via == "bifrost-mcp":
+        from app.clients.mcp_search import BifrostMCPSearchClient
+
+        return BifrostMCPSearchClient(
+            s.bifrost_url, s.mcp_search_tool, rest=rest, timeout_s=s.search_timeout_s + 10
+        )
+    return rest
 
 
 def clients_for(live: bool) -> tuple[LLMClient, SearchClient]:

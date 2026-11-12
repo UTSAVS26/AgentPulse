@@ -63,6 +63,37 @@ class Settings(BaseSettings):
         extra = [m.strip() for m in self.freshness_fallback_models.split(",") if m.strip()]
         return list(dict.fromkeys([self.freshness_model, *extra]))
 
+    guard_auth: str = "open"
+    """Freshness Guard: ``open`` (anonymous callers allowed; presented credentials still verified) or
+    ``required`` (every call needs a Guard API key, an OIDC ID token or the access code)."""
+
+    guard_anonymous_rpm: int = 60
+    """Requests per minute for anonymous Guard callers (keys carry their own limit)."""
+
+    guard_oidc_issuer: str = ""
+    """OIDC issuer URL (e.g. https://accounts.google.com): enables ID tokens as Guard credentials."""
+
+    guard_oidc_audience: str = ""
+    """Expected ``aud`` of ID tokens (your app's client id at the identity provider)."""
+
+    guard_oidc_scopes_claim: str = "scope"
+    """Claim holding the caller's Guard scopes (a space-separated string or a list, e.g. ``roles``)."""
+
+    guard_oidc_default_scopes: str = "guard:annotate"
+    """Scopes for a valid ID token whose claim names none."""
+
+    guard_oidc_rpm: int = 60
+
+    web_search_via: str = "bifrost-mcp"
+    """``bifrost-mcp``: web searches go to Tavily's MCP server through Bifrost (falling back to the REST API
+    if MCP is unavailable); ``rest``: straight to Tavily's REST API."""
+
+    mcp_search_tool: str = "tavily-tavily_search"
+    """Bifrost's name for the Tavily search tool: ``<MCP client>-<tool>``."""
+
+    chaos_token: str = "agentpulse-chaos"
+    """Shared with Bifrost (the chaos provider's key) so only Bifrost can call the outage-drill endpoint."""
+
     freshbench_per_cell: int = 2
     """Live Freshness Bench: questions per category × age bucket (6 × 6 cells → up to 72 questions)."""
 

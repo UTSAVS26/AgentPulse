@@ -223,6 +223,17 @@ Tasks accept `event_date` (`YYYY-MM-DD`), `source_url` and `source_title`; suite
 (`freshbench` for snapshots, which are read-only) and `snapshot_date`. `GET /runs/{id}/metrics` adds
 `knowledge_curve` (or `null`).
 
+## Outage drills
+
+`POST /runs` takes `outage_rate` (0–0.9) and `drill_fallbacks`; see [bifrost.md](bifrost.md). The token Bifrost
+uses to call the chaos provider can be managed from the dashboard:
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/chaos/token` | Where the token comes from (`dashboard` or `environment`), when it was created, whether the shipped default is in use, whether Bifrost's management API is available. Never the token. |
+| POST | `/chaos/token` | Create a random token, or set your own (`{"token": "…", 24+ characters}`): stored encrypted and set in Bifrost. Access code on a public deployment. `409` when Bifrost's management API is locked, `502` (nothing changed) when Bifrost can't be updated. |
+| DELETE | `/chaos/token` | Go back to the `CHAOS_TOKEN` setting |
+
 ## Freshness Guard
 
 An OpenAI-compatible proxy that fact-checks answers: point an OpenAI SDK at `<backend>/guard/v1`. Details:
@@ -232,7 +243,11 @@ An OpenAI-compatible proxy that fact-checks answers: point an OpenAI SDK at `<ba
 |---|---|---|
 | POST | `/guard/v1/chat/completions` | Chat completion through the Guard. Mode: header `X-AgentPulse-Guard` or body `guard` (`annotate` · `correct` · `block` · `off`). Returns OpenAI JSON (or SSE with `stream: true`) plus `agentpulse` and `X-AgentPulse-*` headers. |
 | GET | `/guard/v1/models` | Models the Guard can forward to (OpenAI list format) |
-| GET | `/guard/stats` | Guarded calls per model: verdicts, actions, flagged rate |
+| GET | `/guard/stats` | Guarded calls per model: verdicts, actions, flagged rate (scope `guard:stats`) |
+| GET | `/guard/whoami` | The presented credential: caller, scopes, rate limit, whether it is live |
+| POST · GET · DELETE | `/guard/keys` · `/guard/keys/{id}` | Issue (secret shown once), list and revoke Guard API keys. Needs the access code whenever one is configured. |
+
+Credentials, scopes, `GUARD_AUTH` and OIDC ID tokens: [guard.md](guard.md#access-control-keys-id-tokens-scopes).
 
 `GET /freshness/checks` takes `source` (`text` · `execution` · `benchmark` · `guard`); `manual_only` hides
 benchmark and Guard checks. Check summaries include `model` and `guard_action` for Guard calls.

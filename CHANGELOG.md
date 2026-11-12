@@ -2,6 +2,57 @@
 
 All notable changes per build phase.
 
+## [v3.5] v3 wrap-up: docs, demo script, drill token on the dashboard
+
+### Added
+- **Create your own outage-drill token on the dashboard** (Run Benchmark → 🌩️ Provider outage drill → 🔑): a
+  strong random token, or your own (24+ characters), stored **encrypted**, pushed into Bifrost at runtime through
+  its management API, never shown, and **re-applied automatically** at startup and before every live drill
+  (Bifrost forgets runtime keys on restart). If Bifrost can't be updated nothing changes. The page warns while
+  the shipped default token is in use. `GET/POST/DELETE /chaos/token`; the `/chaos` endpoint checks the effective
+  token (dashboard one first). Verified against the real Bifrost: create, drill, restart Bifrost, drill again.
+- README: a v3 summary, new feature rows, architecture diagram and layout for the new modules; new screenshots
+  (Freshness Guard, Compare → Gateway) in the README and docs.
+- `docs/DEMO_SCRIPT.md`: the v3 click path (is the ranking real, the Freshness Bench, the Guard with keys, the
+  outage drill), and extra fallback-plan rows.
+
+### Changed
+- Backend version 3.5.0. The README notes that the pitch deck covers v1 and v2.
+
+## [v3.4] Deeper Bifrost use, and Guard access control
+
+### Added
+- **Provider-outage drills** ([docs/bifrost.md](docs/bifrost.md#deeper-use-fallbacks-overhead-and-the-mcp-gateway)):
+  a `chaos` custom provider in Bifrost (backed by AgentPulse's own `/chaos` endpoint, callable only by Bifrost)
+  fails a chosen share of model calls with a 503. With request-level `fallbacks`, **Bifrost's own fallback
+  machinery** retries them on the fallback model. Run Benchmark gets an outage slider and a fallbacks switch;
+  compare runs with fallbacks on and off.
+- **Agent fallbacks:** agents have a `fallbacks` list (Agents → *Fallback models*) sent with every request, so
+  Bifrost rescues a real outage or rate limit as well.
+- **Gateway overhead and fallback metrics:** per call (`gateway_ms` on trace steps), per execution and per agent
+  (`gateway_overhead_ms_p50/_p95`, `llm_calls`, `fallback_calls`, `fallback_rate`, `rescued_by_gateway`,
+  `outage_failures`). New **🛰️ Gateway** tab on Compare; traces say *"rescued by a Bifrost fallback"*.
+- **Tavily through Bifrost's MCP gateway:** web search (agents' `web_search`, the stale-answer detector, the
+  Freshness Bench, the Guard) goes through `POST /v1/mcp/tool/execute` (`WEB_SEARCH_VIA=bifrost-mcp`, default),
+  with automatic fallback to the REST API and the route shown on the trace.
+- **Freshness Guard access control** ([docs/guard.md](docs/guard.md#access-control-keys-id-tokens-scopes)):
+  Guard **API keys** (`apg_…`, shown once, stored only as a hash, expiring, revocable, per-key rate limit),
+  **OIDC ID tokens** (JWKS signature, issuer, audience and expiry verified; asymmetric algorithms only), and the
+  access code, each with **scopes** (`guard:annotate|correct|block|off|live|stats`). `GUARD_AUTH=required` refuses
+  anonymous calls; `401`/`403` carry `WWW-Authenticate`, `429` carries `Retry-After`. `GET /guard/whoami`,
+  `POST/GET/DELETE /guard/keys`, an **Access** section on the Guard page, and the caller on every check.
+
+### Changed
+- Reports moved to page 10 in file order (URLs unchanged). Run labels show an outage drill.
+- The cloud image sets `WEB_SEARCH_VIA=rest` (Bifrost's MCP gateway needs a config store, which the free
+  instance disables); outage drills work there.
+- Backend version 3.4.0; PyJWT is a new dependency (ID-token verification), the OpenAI SDK stays a dev dependency.
+
+### Fixed
+- Repository files had mixed CRLF/LF endings (the start script is checked for LF): all normalised to LF.
+- The demo seeding no longer runs on the startup path (found when the image's API wasn't up yet in the smoke
+  test), which also shortens startup on small instances.
+
 ## [v3.3] Freshness Guard
 
 ### Added

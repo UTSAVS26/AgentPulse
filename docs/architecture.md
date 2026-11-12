@@ -90,7 +90,7 @@ tasks. Details: [stale-answer-detection.md](stale-answer-detection.md).
   mock benchmark runs. See [setup.md](setup.md#demo-data).
 - `app/guard/` + `app/routers/guard.py`: the Freshness Guard, an OpenAI-compatible proxy that forwards a chat
   request through the model router, runs the stale-answer detector on the answer and annotates, corrects or
-  blocks it. See [guard.md](guard.md).
+  blocks it; `app/guard/auth.py` authenticates callers (API keys, OIDC ID tokens, scopes, rate limits). See [guard.md](guard.md).
 - `app/freshbench/`: the Live Freshness Bench: question generator (Tavily news by age window → writer →
   validator), background jobs, the knowledge-cutoff curve and the daily pulse. See [freshbench.md](freshbench.md).
 

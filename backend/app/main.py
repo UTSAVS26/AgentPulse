@@ -3,20 +3,23 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app import __version__
+from app import __version__, chaos_token
 from app.bench.engine import get_bench_engine, mark_interrupted_runs
 from app.clients import LLMError
 from app.config import Settings, get_settings
+from app.connection_routes import get_admin
 from app.db import get_sessionmaker, init_db, ping_db
 from app.freshbench.pulse import start_scheduler
 from app.mode import ACCESS_CODE_HEADER, Mode, get_mode, is_public_deployment, live_available
 from app.routers import agents as agents_router
+from app.routers import chaos as chaos_router
 from app.routers import connections as connections_router
 from app.routers import freshbench as freshbench_router
 from app.routers import freshness as freshness_router
@@ -30,6 +33,15 @@ from app.seed.demo import seed_demo_data
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def _reapply_chaos_token(settings: Settings) -> None:
+    """A dashboard-created chaos token lives in the database; Bifrost forgets runtime keys on restart."""
+    try:
+        with get_sessionmaker()() as db:
+            chaos_token.ensure_applied(db, settings, get_admin(settings))
+    except Exception:  # noqa: BLE001 - never block startup
+        logging.getLogger(__name__).warning("could not re-apply the chaos token", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
@@ -41,6 +53,7 @@ async def lifespan(_: FastAPI):
             seed_suites(db)
             if settings.seed_demo_data:
                 seed_demo_data(db, get_bench_engine(), settings)
+    threading.Thread(target=_reapply_chaos_token, args=(settings,), daemon=True).start()
     start_scheduler(settings, get_sessionmaker(), get_bench_engine)  # no-op unless FRESHBENCH_PULSE_HOUR_UTC
     yield
 
@@ -64,6 +77,8 @@ app.include_router(freshness_router.router)
 app.include_router(reports_router.router)
 app.include_router(freshbench_router.router)
 app.include_router(guard_router.router)
+app.include_router(chaos_router.router)
+app.include_router(chaos_router.router_public)
 
 
 class ComponentStatus(BaseModel):

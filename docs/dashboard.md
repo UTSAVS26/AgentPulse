@@ -13,7 +13,7 @@ Streamlit app in [`frontend/`](../frontend/). Pages appear in the sidebar in thi
 | **🔍 Traces** | Step-by-step view of a single execution |
 | **🕰️ Stale-Answer Detector** | Check any text, or an agent's answer, for claims that are no longer true (live Tavily sources with dates) |
 | **📡 Freshness Bench** | Generate today's benchmark from the news (Tavily, with progress), browse its questions and sources, run agents on it, and read each agent's **knowledge-cutoff curve**; history and drift alerts across days. See [freshbench.md](freshbench.md). |
-| **🛡️ Freshness Guard** | Try the OpenAI-compatible fact-checking proxy on a question (annotate, correct or block), copy the one-line SDK setup, and see guarded traffic per model. See [guard.md](guard.md). |
+| **🛡️ Freshness Guard** | Try the OpenAI-compatible fact-checking proxy on a question (annotate, correct or block), copy the one-line SDK setup, and see guarded traffic per model. Manage Guard API keys and see who called. See [guard.md](guard.md). |
 | **📄 Reports** | Download a run as Markdown, leaderboard CSV, executions CSV or JSON, with a rendered preview of the Markdown report |
 
 ## Compare page

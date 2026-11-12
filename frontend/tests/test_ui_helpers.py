@@ -51,3 +51,56 @@ def test_statistics_caption_explains_missing_interval():
     assert "A **95% CI** of – means" in statistics_caption(data)
     data["leaderboard"] = data["leaderboard"][1:]
     assert "of – means" not in statistics_caption(data)
+
+
+def test_gateway_labels_on_trace_steps():
+    from ui import gateway_note, search_route_label
+
+    rescued = {
+        "provider": "groq",
+        "fallback": True,
+        "primary_provider": "chaos",
+        "gateway_ms": 14.7,
+        "route_model": "chaos/r50/groq/openai/gpt-oss-20b",
+    }
+    assert gateway_note(rescued) == " · 🛟 rescued by a Bifrost fallback (chaos → groq) · gateway 15 ms"
+    drill_ok = {"provider": "groq", "route_model": "chaos/r50/groq/x", "gateway_ms": 4.0}
+    assert gateway_note(drill_ok) == " · 🌩️ outage drill route, answered by groq · gateway 4 ms"
+    assert gateway_note({"provider": "groq"}) == ""
+    assert search_route_label("bifrost-mcp") == "🛰️ Bifrost MCP (Tavily)"
+    assert search_route_label("rest (Bifrost MCP unavailable: timeout)").startswith(
+        "Tavily REST ⚠️ (Bifrost MCP"
+    )
+    assert search_route_label("mock") == "mock search"
+
+
+def test_leaderboard_shows_rescues_only_for_drills():
+    from ui import leaderboard_frame
+
+    base = {
+        "rank": 1,
+        "agent_name": "A",
+        "model": "m",
+        "route": "bifrost",
+        "connection": None,
+        "reliability_score": 0.9,
+        "reliability_ci": None,
+        "tier": 1,
+        "tied_with": [],
+        "accuracy": 0.9,
+        "consistency": None,
+        "recovery_rate": None,
+        "error_rate": 0.0,
+        "latency_ms_p50": 500,
+        "latency_ms_p95": 900,
+        "tokens_mean": 100,
+        "cost_usd_total": 0.001,
+        "executions": 4,
+        "gateway_overhead_ms_p50": 5.2,
+        "fallback_calls": 0,
+        "outage_failures": 0,
+    }
+    plain = leaderboard_frame([base])
+    assert "🛟 Rescued by Bifrost" not in plain.columns and plain["Gateway p50"][0] == "5 ms"
+    drilled = leaderboard_frame([{**base, "fallback_calls": 3, "rescued_by_gateway": 2}])
+    assert drilled["🛟 Rescued by Bifrost"][0] == 2
