@@ -193,12 +193,13 @@ def render_trace(trace: list[dict[str, Any]]) -> None:
 def _describe(kind: str, p: dict[str, Any]):
     if kind == "llm_call":
         calls = p.get("tool_calls") or []
+        via = gateway_note(p)
         if calls:
             names = ", ".join(c["name"] for c in calls)
-            return f"Model → requests tool: {names}", lambda: st.code(
+            return f"Model → requests tool: {names}{via}", lambda: st.code(
                 json.dumps(calls, indent=2, ensure_ascii=False), language="json"
             )
-        return "Model → answer", lambda: st.markdown(p.get("content") or "_(empty)_")
+        return f"Model → answer{via}", lambda: st.markdown(p.get("content") or "_(empty)_")
     if kind == "tool_call":
         return f"Call `{p.get('name')}`", lambda: st.code(
             json.dumps(p.get("arguments"), ensure_ascii=False), language="json"
@@ -209,7 +210,8 @@ def _describe(kind: str, p: dict[str, Any]):
                 p.get("content", "")
             )
         status = "ok" if p.get("ok") else "failed"
-        return f"`{p.get('name')}` → {status}", lambda: st.code(p.get("content", ""), language=None)
+        via = f" · via {search_route_label(p['via'])}" if p.get("via") else ""
+        return f"`{p.get('name')}` → {status}{via}", lambda: st.code(p.get("content", ""), language=None)
     if kind == "error":
         code = f" [{p['status_code']}]" if p.get("status_code") else ""
         return f"Error: {p.get('kind', 'error')}{code}", lambda: st.error(p.get("message", ""))
@@ -218,6 +220,27 @@ def _describe(kind: str, p: dict[str, Any]):
     if kind == "final":
         return "Final answer", lambda: st.markdown(p.get("content") or "_(empty)_")
     return kind, None
+
+
+def gateway_note(p: dict[str, Any]) -> str:
+    """' · 🛟 rescued by Bifrost: chaos → groq · gateway 5 ms' for an llm_call step."""
+    parts = []
+    if p.get("fallback"):
+        primary = p.get("primary_provider") or "primary"
+        parts.append(f"🛟 rescued by a Bifrost fallback ({primary} → {p.get('provider')})")
+    elif p.get("route_model"):
+        parts.append(f"🌩️ outage drill route, answered by {p.get('provider')}")
+    if p.get("gateway_ms") is not None:
+        parts.append(f"gateway {p['gateway_ms']:.0f} ms")
+    return "".join(f" · {x}" for x in parts)
+
+
+def search_route_label(route: str) -> str:
+    if route == "bifrost-mcp":
+        return "🛰️ Bifrost MCP (Tavily)"
+    if route.startswith("rest (Bifrost MCP unavailable"):
+        return f"Tavily REST ⚠️ ({route[6:-1]})"
+    return {"rest": "Tavily REST", "mock": "mock search"}.get(route, route)
 
 
 # ------------------------------------------------------------------------------------ formatting
@@ -250,7 +273,9 @@ def run_label(r: dict) -> str:
     mode = "mock" if r["mock_mode"] else "live"
     return (
         f"#{r['id']} · {r['suite_name']} · {len(r['agent_ids'])} agents × {r['repeats']} · "
-        f"faults {r['fault_rate']:.0%} · {mode} · {RUN_STATUS.get(r['status'], r['status'])}"
+        f"faults {r['fault_rate']:.0%} · "
+        + (f"🌩️ outage {r['outage_rate']:.0%} · " if r.get("outage_rate") else "")
+        + f"{mode} · {RUN_STATUS.get(r['status'], r['status'])}"
     )
 
 
@@ -285,6 +310,7 @@ def leaderboard_frame(board: list[dict]):
     import pandas as pd
 
     freshness = any(r.get("freshness_checked") for r in board)
+    drilled = any(r.get("fallback_calls") or r.get("outage_failures") for r in board)
     return pd.DataFrame(
         [
             {
@@ -308,6 +334,10 @@ def leaderboard_frame(board: list[dict]):
                     if freshness
                     else {}
                 ),
+                **({"🛟 Rescued by Bifrost": r.get("rescued_by_gateway", 0)} if drilled else {}),
+                "Gateway p50": "–"
+                if r.get("gateway_overhead_ms_p50") is None
+                else f"{r['gateway_overhead_ms_p50']:.0f} ms",
                 "Done": r["executions"],
             }
             for r in board

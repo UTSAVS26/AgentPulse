@@ -28,3 +28,6 @@ services:
       # Encrypts API keys stored for model connections (Render generates a random value once).
       - key: APP_SECRET
         generateValue: true
+      # Shared by Bifrost and the backend so only Bifrost can call the outage-drill provider.
+      - key: CHAOS_TOKEN
+        generateValue: true

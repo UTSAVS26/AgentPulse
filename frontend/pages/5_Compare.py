@@ -99,7 +99,9 @@ if jury:
 has_freshness = any(r.get("freshness_checked") for r in board)
 curve = data.get("knowledge_curve")
 tab_names = ["Overview", "Speed & cost", "Per task", "Failures & recovery"]
-extra = (["🕰️ Freshness"] if has_freshness else []) + (["📡 Knowledge cutoff"] if curve else [])
+extra = (
+    (["🕰️ Freshness"] if has_freshness else []) + (["📡 Knowledge cutoff"] if curve else []) + ["🛰️ Gateway"]
+)
 tabs = st.tabs(tab_names + extra)
 tab_overview, tab_cost, tab_tasks, tab_failures = tabs[:4]
 CHART_CFG = {"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]}
@@ -282,7 +284,7 @@ if has_freshness:
                 st.success("No stale answers in this run.")
 
 if curve:
-    with tabs[-1]:
+    with tabs[-2]:
         st.caption(
             "This run's questions are about dated events (a **Freshness Bench**). Accuracy by how long "
             "ago the event happened shows what each agent *knows* versus what it can *look up*. Details "
@@ -302,3 +304,42 @@ if curve:
                     f"**{a['agent_name']}**: {c.get('status', 'n/a')}"
                     + (f": {c['detail']}" if c.get("detail") else ".")
                 )
+
+with tabs[-1]:
+    drill = run.get("outage_rate")
+    if drill:
+        st.info(
+            f"🌩️ **Outage drill:** {drill:.0%} of model calls went through a chaos provider in Bifrost that "
+            f"failed them on purpose. Bifrost fallbacks were "
+            f"**{'on' if run.get('drill_fallbacks') else 'off'}**."
+        )
+    st.caption(
+        "Every model call goes through the Bifrost gateway. **Rescued by Bifrost**: answers delivered "
+        "because Bifrost retried a failed call on a fallback model. **Gateway p50/p95**: Bifrost's own time "
+        "per model call (our measured time minus the provider's, as Bifrost reports it). Client retries "
+        "are AgentPulse's own retries after an error reached the agent."
+    )
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Agent": r["agent_name"],
+                    "Model calls": r.get("llm_calls", 0),
+                    "Answered by a fallback": r.get("fallback_calls", 0),
+                    "Fallback rate": pct(r.get("fallback_rate")),
+                    "🛟 Rescued by Bifrost": r.get("rescued_by_gateway", 0),
+                    "Failed by the outage": r.get("outage_failures", 0),
+                    "Client retries": r.get("llm_retries", 0),
+                    "Gateway p50": "–"
+                    if r.get("gateway_overhead_ms_p50") is None
+                    else f"{r['gateway_overhead_ms_p50']:.1f} ms",
+                    "Gateway p95": "–"
+                    if r.get("gateway_overhead_ms_p95") is None
+                    else f"{r['gateway_overhead_ms_p95']:.1f} ms",
+                }
+                for r in board
+            ]
+        ),
+        hide_index=True,
+        use_container_width=True,
+    )

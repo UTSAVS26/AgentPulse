@@ -26,6 +26,24 @@ class AgentBase(BaseModel):
     tools: list[str] = Field(default_factory=list, examples=[["web_search", "calculator", "current_date"]])
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     max_steps: int = Field(default=6, ge=1, le=20, description="Maximum model calls per task.")
+    fallbacks: list[str] = Field(
+        default_factory=list,
+        max_length=4,
+        description="Models Bifrost tries in order when this agent's model fails (`provider/model`).",
+        examples=[["openrouter/openai/gpt-oss-20b"]],
+    )
+
+    @field_validator("fallbacks", mode="before")
+    @classmethod
+    def _valid_fallbacks(cls, v: object) -> object:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            bad = [m for m in v if not isinstance(m, str) or "/" not in m.strip() or m.startswith("custom/")]
+            if bad:
+                raise ValueError(f"fallbacks must be Bifrost model ids like groq/openai/gpt-oss-20b: {bad}")
+            return [m.strip() for m in v]
+        return v
 
     @field_validator("tools")
     @classmethod
@@ -112,6 +130,12 @@ class ExecutionOut(BaseModel):
     freshness_score: float | None
     freshness_verdict: str | None = Field(
         default=None, description="Stale-answer check of this answer: fresh | stale | wrong | unverified..."
+    )
+    fallback_calls: int | None = Field(
+        default=None, description="Model calls answered by a Bifrost fallback."
+    )
+    gateway_ms: float | None = Field(
+        default=None, description="Bifrost's own time over all model calls (ms)."
     )
     jury: list[dict] | None = Field(
         default=None,
@@ -259,6 +283,16 @@ class RunCreate(BaseModel):
         default=True,
         description="Run the stale-answer detector (Tavily) on answers to time-sensitive tasks.",
     )
+    outage_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=0.9,
+        description="Outage drill: share of model calls failed by a simulated provider outage (chaos route).",
+    )
+    drill_fallbacks: bool = Field(
+        default=True,
+        description="Outage drill: let Bifrost fallbacks rescue failed calls (the agent's, else its model).",
+    )
 
 
 class RunOut(BaseModel):
@@ -273,6 +307,8 @@ class RunOut(BaseModel):
     fault_rate: float
     mock_mode: bool
     check_freshness: bool | None = None
+    outage_rate: float | None = None
+    drill_fallbacks: bool | None = None
     status: str
     progress_done: int
     progress_total: int
@@ -361,6 +397,9 @@ class FreshnessCheckSummary(BaseModel):
     )
     guard_action: str | None = Field(
         default=None, description="Freshness Guard: annotated | corrected | blocked."
+    )
+    caller: str | None = Field(
+        default=None, description="Freshness Guard: who called (key:<name>, oidc:<user>)."
     )
     latency_ms: float | None
     created_at: datetime

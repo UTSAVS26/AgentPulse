@@ -15,11 +15,19 @@ AgentPulse answers two questions about AI agents:
    them against live Tavily search results and their publication dates: *current*, *outdated* (stale),
    *contradicted* or *unverifiable*.
 
+**New in v3:** every score now comes with a 95% interval and a verdict on whether the ranking is real, a
+**jury** of frontier judges from different labs, a **Live Freshness Bench** built from today's news that measures
+each model's *knowledge cutoff*, a **Freshness Guard** (an OpenAI-compatible fact-checking proxy with API keys,
+ID tokens and scopes), and deeper Bifrost use: **outage drills rescued by Bifrost's own fallbacks**, gateway
+overhead, and **Tavily through Bifrost's MCP gateway**.
+
 **Live demo:** https://agentpulse-9551.onrender.com. It runs in mock mode for everyone, and live mode is
 unlocked with an access code from the team. The free instance sleeps when idle, so allow about a minute for
 the first load.
 
 ![Compare page](docs/images/compare.png)
+
+![Live Freshness Bench: knowledge-cutoff curve](docs/images/freshbench.png)
 
 ## Features
 
@@ -29,10 +37,14 @@ the first load.
 | **Bring your own model** | Connect any OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, llama.cpp, OpenAI, Anthropic, Gemini, Mistral…) with a base URL, model name and optional API key (encrypted, never shown again). Test chat and tool calling, then benchmark it next to the built-in models. |
 | **Your own benchmarks** | Create, duplicate, import and export (YAML, CSV) suites; edit tasks in a table; test scorers on sample answers. |
 | **Benchmarks** | Suite × agents × repeats × fault rate, in the background with live progress. Scorers: contains, exact, numeric, regex, LLM judge. Three built-in suites (factual QA, math & reasoning with tools, time-sensitive current events). |
+| **Is the ranking real?** | 95% intervals (Wilson for accuracy, paired task-level bootstrap for reliability), rank **tiers** that say when agents are statistically tied, a power note, and a **jury** scorer (three judge models from different labs, Fleiss κ and disputed tasks). [Details](docs/statistics.md). |
+| **Live Freshness Bench** | Tavily news from this week to two years ago → a model writes dated questions → a second check rejects weak ones → a read-only daily snapshot. Run agents on it and read each one's **knowledge cutoff**; a daily pulse tracks drift. [Details](docs/freshbench.md). |
+| **Freshness Guard** | An OpenAI-compatible proxy: point any OpenAI SDK at AgentPulse and each answer is fact-checked, then annotated, corrected (with citations) or blocked. Guard API keys, OIDC ID tokens and scopes. [Details](docs/guard.md). |
+| **Bifrost, deeper** | **Outage drills** (a chaos provider fails a share of calls; Bifrost's own fallbacks rescue them), per-call gateway overhead, and web search through Bifrost's **MCP gateway**. [Details](docs/bifrost.md). |
 | **Reliability metrics** | Accuracy, consistency, pass@k, pass-all-k, error rate, **recovery rate** (failed and still correct), p50/p95 latency, tokens, list-price cost, cost per correct answer, and a composite **reliability score** with documented weights. |
 | **Fault injection** | Tool timeouts, HTTP 500s, empty and malformed results; LLM retries with backoff; rate-limit-aware retries; corrective retry on rejected tool calls. |
 | **Stale-answer detector** | LLM claim extraction, time-sensitivity flags (LLM + rules), a neutral Tavily query per claim, an LLM verdict against dated sources, clock checks for "today" claims, a freshness score. It runs automatically on benchmark answers to time-sensitive tasks. |
-| **Dashboard** | Compare (tiles, leaderboard, reliability bars, radar, latency, accuracy-vs-cost, task heatmap, failures, freshness), Traces (step timeline), Detector, Reports. |
+| **Dashboard** | Compare (tiles, leaderboard with intervals and tiers, reliability bars, radar, latency, accuracy-vs-cost, task heatmap, failures, freshness, knowledge cutoff, gateway), Traces (step timeline), Detector, Freshness Bench, Freshness Guard, Reports. |
 | **Reports** | Markdown, CSV (leaderboard or executions) and JSON per run, with the same numbers as the dashboard. [Example from a live run](docs/examples/live-run-report.md). |
 | **Mock mode** | Deterministic simulated models and search, with the *same* code paths. The whole product works offline with no keys, and demo data is pre-seeded. |
 
@@ -53,6 +65,10 @@ the first load.
 <td><img src="docs/images/reports.png" alt="Reports page"></td>
 <td><img src="docs/images/compare-tasks.png" alt="Compare: pass rate per task (heatmap)"></td>
 </tr>
+<tr>
+<td><img src="docs/images/guard.png" alt="Freshness Guard: a stale answer corrected with dated sources"></td>
+<td><img src="docs/images/gateway.png" alt="Compare: gateway tab of an outage drill, answers rescued by Bifrost fallbacks"></td>
+</tr>
 </table>
 
 ## How the hackathon challenges are used
@@ -65,10 +81,20 @@ the first load.
 - Costs come from Bifrost's model catalogue (`/v1/models` pricing).
 - Bifrost's error kinds (rate limits, provider errors, rejected tool calls) drive the runtime's retry and
   recovery logic.
+- **Fallbacks and outage drills:** a custom `chaos` provider fails a chosen share of model calls; with
+  request-level `fallbacks`, Bifrost retries them on a backup model, and AgentPulse reports what the gateway
+  rescued. Agents can carry their own `fallbacks` for real outages.
+- **Gateway overhead:** Bifrost's reported provider latency vs our measured time, per call.
+- **MCP gateway:** web search runs as a tool call on Bifrost (`/v1/mcp/tool/execute`, Tavily's MCP server), so
+  model calls and tool calls share one gateway.
 - Details: [docs/bifrost.md](docs/bifrost.md).
 
 **Tavily: live search and claim verification.**
-- Agents use Tavily as their `web_search` tool, so tools-vs-no-tools is measurable on time-sensitive tasks.
+- Agents use Tavily as their `web_search` tool (through Bifrost's MCP gateway, with a REST fallback), so
+  tools-vs-no-tools is measurable on time-sensitive tasks.
+- The **Live Freshness Bench** uses Tavily as a *source of fresh evaluation data*: dated news by publication
+  window, turned into questions that did not exist yesterday.
+- The **Freshness Guard** uses the same verification on answers passing through an OpenAI-compatible proxy.
 - The stale-answer detector searches Tavily for each time-sensitive claim, with a neutral query that leaves
   out the claimed answer. It judges the claim against the sources' publication dates and cites the newest.
 - Benchmarks score each agent's *freshness* next to its reliability.
@@ -81,20 +107,20 @@ won the latest World Cup" → outdated (Spain, July 2026), "Python 3.13 is the n
 ## Architecture
 
 ```
-┌──────────────────────┐   HTTP    ┌──────────────────────────┐  OpenAI-compatible  ┌──────────────────┐
-│ Streamlit dashboard  │ ────────▶ │  FastAPI backend :8000   │ ──────────────────▶ │  Bifrost gateway │
-│ :8501                │           │  • agent runtime + tools │                     │  :8080           │
-│ Home · Agents · Run  │           │  • fault injection       │                     └────────┬─────────┘
-│ Compare · Traces     │           │  • benchmark engine      │                ┌─────────────┼─────────────┐
-│ Detector · Reports   │           │  • scoring + metrics     │                ▼             ▼             ▼
-└──────────────────────┘           │  • stale-answer detector │             groq/…    openrouter/…   ollama/… (host)
-                                   │  • reports               │
-                                   └─────┬──────────────┬─────┘
-                                         │              │ HTTPS
+┌──────────────────────┐   HTTP    ┌────────────────────────────┐  OpenAI-compatible  ┌──────────────────┐
+│ Streamlit dashboard  │ ────────▶ │  FastAPI backend :8000     │ ──────────────────▶ │  Bifrost gateway │
+│ :8501                │           │  • agent runtime + tools   │ ◀─ chaos provider ─ │  :8080           │
+│ Home · Models        │           │  • benchmark engine, stats │    (outage drills)  │  • fallbacks     │
+│ Agents · Suites      │           │  • stale-answer detector   │                     │  • MCP gateway   │
+│ Run · Compare        │           │  • Freshness Bench + pulse │                     └────────┬─────────┘
+│ Traces · Detector    │           │  • Freshness Guard proxy   │ ◀── any OpenAI SDK    ┌──────┼──────────┐
+│ Bench · Guard        │           │    (keys, ID tokens)       │     (apg_ key / JWT)  ▼      ▼          ▼
+│ Reports              │           └─────┬──────────────┬───────┘                    groq/…  openrouter/… ollama/…
+└──────────────────────┘                 │              │ HTTPS
                                          ▼              ▼
                                   ┌────────────┐  ┌────────────┐
-                                  │ PostgreSQL │  │ Tavily API │  search · claim verification
-                                  └────────────┘  └────────────┘
+                                  │ PostgreSQL │  │ Tavily API │  news windows · claim verification
+                                  └────────────┘  └────────────┘  (also as MCP tool calls through Bifrost)
 ```
 
 **Mock or live is decided per request.** With `MOCK_MODE=true`, requests are mock unless they carry a valid
@@ -123,8 +149,8 @@ On Windows, `make` is available via `choco install make`.
 
 | Key in `.env` | Used for |
 |---|---|
-| `GROQ_API_KEY` | Groq models via Bifrost (the default agents, judge and detector) |
-| `OPENROUTER_API_KEY` | OpenRouter models via Bifrost |
+| `GROQ_API_KEY` | Groq models via Bifrost (the default agents, and the detector's fallbacks) |
+| `OPENROUTER_API_KEY` | OpenRouter models via Bifrost. The default judges, jury and detector (Claude Sonnet / Opus, Gemini, DeepSeek) are paid OpenRouter models, so keep a few dollars of credit on the key. |
 | `TAVILY_API_KEY` | `web_search` tool and claim verification |
 | Ollama on the host (optional) | `ollama pull granite4:3b` for the local agent |
 
@@ -133,7 +159,7 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 
 ## Documentation
 
-- [Pitch deck (PDF)](docs/AgentPulse-pitch-deck.pdf): 18 slides: the problem, how it works, and exactly how Bifrost and Tavily are used
+- [Pitch deck (PDF)](docs/AgentPulse-pitch-deck.pdf): 18 slides: the problem, how it works, and exactly how Bifrost and Tavily are used (covers v1 and v2; v3 is described in the docs below)
 - [Demo script](docs/DEMO_SCRIPT.md): a 4–5 minute click path, pre-flight checklist and fallback plan
 - [Setup & configuration](docs/setup.md): keys, Ollama, mock vs live mode, demo data, troubleshooting
 - [Architecture](docs/architecture.md): components, clients, detector modules, data model
@@ -143,7 +169,7 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 - [Benchmarks](docs/benchmarks.md): suites, task format, scorers, how runs execute, cost
 - [Metrics](docs/metrics.md): every formula, the reliability score and freshness
 - [Statistics](docs/statistics.md): confidence intervals, statistical ties, and the jury of judges
-- [Freshness Guard](docs/guard.md): an OpenAI-compatible proxy that fact-checks every answer (annotate, correct or block)
+- [Freshness Guard](docs/guard.md): an OpenAI-compatible proxy that fact-checks every answer (annotate, correct or block), with API keys, ID tokens and scopes
 - [Live Freshness Bench](docs/freshbench.md): a benchmark generated from today's news, and each model's knowledge cutoff
 - [Stale-answer detection](docs/stale-answer-detection.md): pipeline, verdicts, freshness score, rate limits, live results
 - [Dashboard](docs/dashboard.md): every page and the chart design rules
@@ -158,10 +184,12 @@ Full setup, every setting and troubleshooting: **[docs/setup.md](docs/setup.md)*
 ```
 backend/app/
   agents/      runtime loop (tool calling, retries, fault injection) and tools
-  bench/       benchmark engine, scoring, metrics, pricing
+  bench/       benchmark engine, scoring (incl. jury), metrics, statistics, pricing
   freshness/   stale-answer detector: prompts, heuristics, checker, store
-  clients/     Bifrost + Tavily clients and their mock twins
-  routers/     agents, suites, runs, freshness, reports APIs
+  freshbench/  Live Freshness Bench: generator, jobs, knowledge-cutoff curve, daily pulse
+  guard/       Freshness Guard proxy: service, access control (keys, OIDC, scopes, rate limits)
+  clients/     Bifrost (+ fallbacks, MCP search) and Tavily clients, chaos ids, and their mock twins
+  routers/     agents, suites, runs, freshness, freshbench, guard, chaos, reports APIs
   seed/        default agents, task suites, demo data
   reports.py   Markdown / CSV / JSON reports
 frontend/      Streamlit dashboard (Home.py, pages/, charts.py, ui.py, api.py)

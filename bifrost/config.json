@@ -13,7 +13,9 @@
         {
           "name": "groq-primary",
           "value": "env.GROQ_API_KEY",
-          "models": ["*"],
+          "models": [
+            "*"
+          ],
           "weight": 1.0
         }
       ]
@@ -23,7 +25,9 @@
         {
           "name": "openrouter-primary",
           "value": "env.OPENROUTER_API_KEY",
-          "models": ["*"],
+          "models": [
+            "*"
+          ],
           "weight": 1.0
         }
       ]
@@ -36,13 +40,62 @@
         {
           "name": "ollama-local",
           "value": "",
-          "models": ["*"],
+          "models": [
+            "*"
+          ],
           "weight": 1.0,
           "ollama_key_config": {
             "url": "env.OLLAMA_URL"
           }
         }
       ]
+    },
+    "chaos": {
+      "keys": [
+        {
+          "name": "chaos-key",
+          "value": "env.CHAOS_TOKEN",
+          "models": [
+            "*"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "network_config": {
+        "base_url": "http://backend:8000/chaos",
+        "allow_private_network": true,
+        "max_retries": 0
+      },
+      "custom_provider_config": {
+        "base_provider_type": "openai",
+        "allowed_requests": {
+          "chat_completion": true,
+          "chat_completion_stream": false,
+          "list_models": false
+        }
+      }
+    }
+  },
+  "mcp": {
+    "client_configs": [
+      {
+        "name": "tavily",
+        "connection_type": "http",
+        "connection_string": "https://mcp.tavily.com/mcp/",
+        "auth_type": "headers",
+        "headers": {
+          "Authorization": "env.TAVILY_AUTH"
+        },
+        "tools_to_execute": [
+          "tavily_search",
+          "tavily_extract"
+        ],
+        "allow_by_default": true
+      }
+    ],
+    "tool_manager_config": {
+      "disable_auto_tool_inject": true,
+      "tool_execution_timeout": 30
     }
   }
 }

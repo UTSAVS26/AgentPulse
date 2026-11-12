@@ -31,6 +31,7 @@ from datetime import date
 from typing import Any
 
 from app.clients import mock_news
+from app.clients.chaos import OUTAGE_MESSAGE, parse_chaos
 from app.clients.llm import LLMError, LLMResponse, ToolCall
 from app.clients.mock_freshbench import freshbench_responder
 from app.clients.mock_freshness import freshness_responder
@@ -175,11 +176,27 @@ class MockLLMClient:
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
+        fallbacks: list[str] | None = None,
     ) -> LLMResponse:
+        requested = model
+        primary_provider, fallback_used = "", False
+        chaos = parse_chaos(model)
+        if chaos:  # outage drill: like Bifrost with the chaos provider and request-level fallbacks
+            rate, real = chaos
+            drill = self._rng(f"chaos|{real}", messages)
+            if drill.random() < rate:
+                if not fallbacks:
+                    self._sleep(15)
+                    raise LLMError(OUTAGE_MESSAGE, retryable=True, status_code=503, kind="provider_error")
+                model, primary_provider, fallback_used = fallbacks[0], "chaos", True
+            else:
+                model = real
         profile = profile_for(model)
         rng = self._rng(model, messages)
         latency_ms = max(20.0, profile.latency_ms + rng.uniform(-profile.jitter_ms, profile.jitter_ms))
-        self._sleep(latency_ms)
+        # the gateway's own share, derived (not drawn) so the seeded answers stay exactly as they were
+        overhead_ms = 1.0 + (int(latency_ms * 1000) % 500) / 100 + (8.0 if fallback_used else 0.0)
+        self._sleep(latency_ms + overhead_ms)
 
         failure_rate = (
             self.failure_rate_override if self.failure_rate_override is not None else profile.failure_rate
@@ -201,10 +218,13 @@ class MockLLMClient:
             tool_calls=tool_calls,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
-            latency_ms=latency_ms,
-            model=model,
+            latency_ms=latency_ms + overhead_ms,
+            model=requested,
             provider=model.split("/", 1)[0],
             finish_reason="tool_calls" if tool_calls else "stop",
+            fallback_used=fallback_used,
+            primary_provider=primary_provider,
+            upstream_latency_ms=latency_ms,
         )
 
     # ------------------------------------------------------------------ internals

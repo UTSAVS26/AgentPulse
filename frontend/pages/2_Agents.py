@@ -116,6 +116,17 @@ def agent_form(key: str, initial: dict | None = None) -> dict | None:
             default=[t for t in initial.get("tools", []) if t in tool_names],
             help="; ".join(f"{t['name']}: {t['description'][:80]}" for t in tools_catalogue),
         )
+        gateway_models = [m for m in model_options if m != CUSTOM_MODEL and not m.startswith("custom/")]
+        current_fallbacks = list(initial.get("fallbacks") or [])
+        fallbacks = st.multiselect(
+            "Fallback models (Bifrost)",
+            list(dict.fromkeys([*current_fallbacks, *gateway_models])),
+            default=current_fallbacks,
+            max_selections=4,
+            help="If this agent's model fails (provider outage, rate limit), Bifrost retries the call on "
+            "these, in order. Used in real runs and in outage drills. Your own model connections can't "
+            "be fallbacks.",
+        )
         system_prompt = st.text_area("System prompt", value=initial.get("system_prompt", ""), height=120)
         c1, c2 = st.columns(2)
         temperature = c1.slider("Temperature", 0.0, 2.0, float(initial.get("temperature", 0.0)), 0.1)
@@ -139,6 +150,7 @@ def agent_form(key: str, initial: dict | None = None) -> dict | None:
         "description": description,
         "model": model,
         "tools": selected_tools,
+        "fallbacks": fallbacks,
         "system_prompt": system_prompt,
         "temperature": temperature,
         "max_steps": int(max_steps),

@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
 from openai import OpenAI
 
 from app.clients import mock_llm
 from app.clients.llm import LLMError
 from app.config import Settings
 from app.guard.service import Guard, deterministic_correction, last_user_text, needs_check
-from app.routers.guard import _live
 
 STALE = "The current UK Prime Minister is Rishi Sunak, leader of the Conservative Party."
 MODEL = "groq/openai/gpt-oss-120b"
@@ -80,6 +78,7 @@ def test_timeless_answers_and_guard_off_are_not_checked(sdk, client):
         "checked": False,
         "reason": "nothing time-sensitive",
         "mode": "mock",
+        "caller": "anonymous",
     }
     off = sdk.chat.completions.create(
         model=MODEL, messages=QUESTION, extra_headers={"X-AgentPulse-Guard": "off"}
@@ -143,19 +142,6 @@ def test_models_and_stats(sdk, client):
     stats = client.get("/guard/stats").json()
     row = next(m for m in stats["models"] if m["model"] == MODEL)
     assert row["checked"] >= 1 and row["flagged"] >= 1 and 0 < row["flagged_rate"] <= 1
-
-
-def test_access_code_rules_for_sdk_keys():
-    local = Settings(mock_mode=False)
-    assert _live(local, "Bearer sk-anything", None) is True  # locally the key is ignored
-    demo = Settings(mock_mode=True)
-    assert _live(demo, "Bearer sk-anything", None) is False  # offline demo: always mock
-    public = Settings(mock_mode=True, live_access_code="secret")
-    assert _live(public, "Bearer mock", None) is False and _live(public, None, None) is False
-    assert _live(public, "Bearer secret", None) is True and _live(public, None, "secret") is True
-    with pytest.raises(HTTPException) as exc:
-        _live(public, "Bearer wrong", None)
-    assert exc.value.status_code == 401
 
 
 def test_correction_falls_back_to_a_note_when_no_model_answers():

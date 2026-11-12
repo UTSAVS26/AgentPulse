@@ -9,6 +9,8 @@ FROM maximhq/bifrost@sha256:a1c90607dcfd13c1fb2f9476ceb3bb24407a50ade7fdf3e61a59
 
 FROM python:3.12-slim
 
+# WEB_SEARCH_VIA=rest: Bifrost runs without a config store here (SQLite locks on tiny instances) and its MCP
+# gateway needs one, so web search goes straight to Tavily's REST API. Outage drills still work.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -20,7 +22,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BIFROST_URL=http://127.0.0.1:8080 \
     BACKEND_URL=http://127.0.0.1:8000 \
     LLM_TIMEOUT_S=120 \
-    SEARCH_TIMEOUT_S=20
+    SEARCH_TIMEOUT_S=20 \
+    WEB_SEARCH_VIA=rest
 
 COPY --from=bifrost /app/main /usr/local/bin/bifrost
 

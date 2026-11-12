@@ -39,6 +39,8 @@ supervise_bifrost() {
   done
 }
 if [ -n "${GROQ_API_KEY:-}${OPENROUTER_API_KEY:-}" ]; then
+  # The outage-drill (chaos) provider's key, shared with the backend.
+  export CHAOS_TOKEN="${CHAOS_TOKEN:-agentpulse-chaos}"
   supervise_bifrost &
 else
   log "no provider API keys set: Bifrost not started (mock mode only)"

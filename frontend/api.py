@@ -31,7 +31,7 @@ def access_code() -> str | None:
 def _request(method: str, path: str, **kwargs: Any) -> tuple[Any | None, str | None]:
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
     code = kwargs.pop("code", None) or access_code()
-    if code:
+    if code and "Authorization" not in kwargs.get("headers", {}):  # an explicit credential wins
         kwargs["headers"] = {**kwargs.get("headers", {}), ACCESS_CODE_HEADER: code}
     try:
         res = requests.request(method, f"{BACKEND_URL}{path}", **kwargs)

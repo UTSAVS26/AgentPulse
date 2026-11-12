@@ -94,11 +94,20 @@ with st.container(border=True):
         "Question", list(EXAMPLES), format_func=lambda q: f"{q}  ({EXAMPLES[q]})", key="guard_example"
     )
     prompt = st.text_area("Or write your own", value=example, height=80, key=f"guard_prompt_{example}")
+    credential = st.text_input(
+        "Call as (optional): a Guard API key or an ID token",
+        type="password",
+        key="guard_try_credential",
+        help="Try what a key or an ID token is allowed to do. Empty: call as this dashboard (the access "
+        "code if you unlocked live mode, else anonymously).",
+    )
     if st.button("🛡️ Send through the Guard", type="primary", disabled=not prompt.strip()):
+        headers = {"Authorization": f"Bearer {credential.strip()}"} if credential.strip() else {}
         with st.spinner("Asking the model, then checking its facts…"):
             res, err = api.post(
                 "/guard/v1/chat/completions",
                 json={"model": model, "messages": [{"role": "user", "content": prompt}], "guard": mode},
+                headers=headers,
                 timeout=240,
             )
         if not show_error(err):
@@ -145,10 +154,100 @@ if res:
                         f"[{s.get('title') or s['url']}]({s['url']}) · {s.get('published_date') or 'undated'}"
                     )
 
+# ------------------------------------------------------------------------------------ access
+SCOPE_HELP = {
+    "guard:annotate": "annotate answers",
+    "guard:correct": "correct stale answers",
+    "guard:block": "block stale answers",
+    "guard:off": "plain proxy, no check",
+    "guard:live": "real models on the public demo",
+    "guard:stats": "read Guard traffic",
+}
+with st.expander("🔐 Access: API keys, ID tokens and scopes"):
+    me, err = api.get("/guard/whoami")
+    if me and not err:
+        st.caption(
+            f"Guard auth: **{me['guard_auth']}** "
+            + (
+                "(every call needs a key, an ID token or the access code)"
+                if me["guard_auth"] == "required"
+                else "(anonymous calls allowed; presented credentials are verified and their scopes enforced)"
+            )
+            + f" · OIDC ID tokens: **{'on' if me['oidc'] else 'off'}** · this dashboard calls as "
+            f"**{me['caller']}** ({', '.join(s.removeprefix('guard:') for s in me['scopes'])})."
+        )
+    st.markdown(
+        "Callers send a credential as `Authorization: Bearer …` (the SDK's `api_key`): a **Guard API key** "
+        "(`apg_…`, issued below, stored only as a hash), an **OIDC ID token** from your identity provider "
+        "(signature, issuer, audience and expiry verified; scopes from a claim), or the access code. Each "
+        "credential carries **scopes** and a **rate limit**. Set `GUARD_AUTH=required` to refuse anonymous "
+        "calls. See docs/guard.md."
+    )
+    keys, kerr = api.get("/guard/keys")
+    if kerr:
+        st.info("Managing keys needs the access code: unlock it in the sidebar.")
+    else:
+        with st.form("new_guard_key", clear_on_submit=True):
+            k1, k2, k3 = st.columns([2, 1, 1])
+            key_name = k1.text_input("Key name", placeholder="e.g. support-bot")
+            expires = k2.number_input("Expires in (days)", 1, 3650, 90)
+            rpm = k3.number_input("Requests / minute", 1, 10_000, 60)
+            scopes = st.multiselect(
+                "Scopes",
+                list(SCOPE_HELP),
+                default=["guard:annotate"],
+                format_func=lambda s: f"{s} ({SCOPE_HELP[s]})",
+            )
+            if st.form_submit_button("Issue key", type="primary"):
+                made, err = api.post(
+                    "/guard/keys",
+                    json={
+                        "name": key_name,
+                        "scopes": scopes,
+                        "expires_in_days": int(expires),
+                        "rpm": int(rpm),
+                    },
+                )
+                if not show_error(err):
+                    st.session_state["guard_new_key"] = made
+        made = st.session_state.pop("guard_new_key", None)
+        if made:
+            st.success(f"Key **{made['name']}** issued. Copy it now: it is shown only once.")
+            st.code(made["key"], language=None)
+        if keys:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Name": k["name"],
+                            "Key": f"{k['prefix']}…",
+                            "Scopes": ", ".join(s.removeprefix("guard:") for s in k["scopes"]),
+                            "Limit": f"{k['rpm']}/min",
+                            "Status": k["status"],
+                            "Expires": (k["expires_at"] or "never")[:10],
+                            "Last used": (k["last_used_at"] or "never")[:16].replace("T", " "),
+                        }
+                        for k in keys
+                    ]
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+            active = {f"{k['name']} ({k['prefix']}…)": k["id"] for k in keys if k["status"] == "active"}
+            if active:
+                r1, r2 = st.columns([3, 1])
+                pick = r1.selectbox("Revoke a key", list(active), label_visibility="collapsed")
+                if r2.button("Revoke", key="guard_revoke"):
+                    _, err = api.delete(f"/guard/keys/{active[pick]}")
+                    if not show_error(err):
+                        st.rerun()
+
 # ------------------------------------------------------------------------------------ traffic
 st.markdown("### Guarded traffic")
 stats, err = api.get("/guard/stats")
-if not show_error(err) and stats and stats["models"]:
+if err and ("401" in err or "403" in err):
+    st.info("Guarded traffic is visible with the `guard:stats` scope: unlock the access code in the sidebar.")
+elif not show_error(err) and stats and stats["models"]:
     st.dataframe(
         pd.DataFrame(
             [
@@ -174,6 +273,7 @@ if not show_error(err) and stats and stats["models"]:
                     {
                         "When (UTC)": c["created_at"][:19].replace("T", " "),
                         "Model": c["model"],
+                        "Caller": c.get("caller") or "–",
                         "Question": c["question"],
                         "Verdict": ANSWER_VERDICTS.get(c["verdict"], c["verdict"]),
                         "Action": c["guard_action"],
@@ -191,5 +291,5 @@ if not show_error(err) and stats and stats["models"]:
             },
         )
     st.caption("Only answers with time-sensitive facts are checked and listed; others pass straight through.")
-else:
+elif not err:
     st.caption("No guarded answers yet. Send one above, or point an app at the Guard.")

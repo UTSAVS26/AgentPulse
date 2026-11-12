@@ -734,3 +734,12 @@ def test_detector_opens_a_linked_guard_check_not_another_one():
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     assert next(s for s in at.selectbox if s.label == "Check").value == check_id
+
+
+def test_run_benchmark_shows_the_drill_token_and_never_the_token():
+    at = app("pages/4_Run_Benchmark.py")
+    captions = " ".join(c.value for c in at.caption)
+    assert "Drill token" in captions and "nobody else can trigger it" in captions
+    status = requests.get(f"{BACKEND}/chaos/token", timeout=10).json()
+    assert {"source", "created_at", "is_default", "can_manage"} <= set(status) and "token" not in status
+    assert all("agentpulse-chaos" not in str(w.value) for w in at.text_input)  # no secret in any input

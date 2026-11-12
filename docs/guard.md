@@ -5,6 +5,8 @@ app and its model: it forwards each chat request (through Bifrost, or your own m
 answer's time-sensitive facts against live Tavily sources, and **annotates**, **corrects** or **blocks** it.
 Any OpenAI SDK, LangChain app or chat UI can use it by changing one setting: the base URL.
 
+![Freshness Guard: a stale answer corrected with dated sources](images/guard.png)
+
 Code: [`backend/app/guard/service.py`](../backend/app/guard/service.py),
 [`backend/app/routers/guard.py`](../backend/app/routers/guard.py). UI: the **🛡️ Freshness Guard** page. Demo:
 [`scripts/guard_demo.py`](../scripts/guard_demo.py).
@@ -82,17 +84,65 @@ is compatible, not faster. **Tools** are forwarded; tool-call replies pass throu
 `GET /guard/v1/models` lists the models (OpenAI format). Errors use OpenAI's shape
 (`{"error": {"message", "type", "code"}}`) with 400 / 401 / 429 / 502 / 504.
 
-## Auth and modes
+## Access control: keys, ID tokens, scopes
 
-| Deployment | API key | Mode |
+Every call carries a credential as `Authorization: Bearer …` (an OpenAI SDK's `api_key`). Three kinds are
+accepted, and each resolves to a **caller** with **scopes** and a **rate limit**:
+
+| Credential | How it is checked | Scopes from |
 |---|---|---|
-| Local, `MOCK_MODE=false` | ignored (the SDK needs one: `not-needed`) | live |
-| Local, `MOCK_MODE=true` | ignored | mock |
-| Public demo (`MOCK_MODE=true` + `LIVE_ACCESS_CODE`) | the access code → live; `mock` or none → mock; anything else → `401` | as said |
+| **Guard API key** `apg_…` | Issued by an admin (`POST /guard/keys`, or the Guard page). The secret is shown **once** and only its SHA-256 hash is stored. Keys expire (default 90 days), can be revoked, and have their own requests-per-minute limit. | Chosen at issue time |
+| **OIDC ID token** (JWT) | Signature verified against the identity provider's JWKS (discovered from `<issuer>/.well-known/openid-configuration`, cached, refreshed for an unknown `kid`), plus `iss`, `aud`, `exp`, `iat` (60 s leeway). Only asymmetric algorithms (RS/PS/ES/EdDSA) are accepted, so `alg: none` and HMAC key-confusion tokens are refused. | A claim (`GUARD_OIDC_SCOPES_CLAIM`, default `scope`: a space-separated string or a list such as `roles`); `guard:annotate` when it names none |
+| **Access code** (`LIVE_ACCESS_CODE`, as bearer or `X-Access-Code`) | Constant-time comparison | All scopes (admin) |
+
+| Scope | Allows |
+|---|---|
+| `guard:annotate` · `guard:correct` · `guard:block` | The matching mode |
+| `guard:off` | Plain proxy without a check |
+| `guard:live` | Real models on a public deployment (otherwise mock) |
+| `guard:stats` | `GET /guard/stats` |
+
+```bash
+# admin issues a key for a partner (the access code is needed to manage keys whenever one is configured)
+curl -s localhost:8000/guard/keys -H 'X-Access-Code: <code>' -H 'content-type: application/json'   -d '{"name": "support-bot", "scopes": ["guard:annotate", "guard:correct"], "expires_in_days": 90, "rpm": 30}'
+# → {"id": 3, "key": "apg_…", "note": "Store this key now: it is not shown again.", …}
+curl -s localhost:8000/guard/whoami -H 'Authorization: Bearer apg_…'    # who am I, what may I do
+curl -s -X DELETE localhost:8000/guard/keys/3 -H 'X-Access-Code: <code>'   # revoke
+```
+
+**Policy.** `GUARD_AUTH=open` (default) lets anonymous callers use the Guard (annotate, correct, block, off,
+stats; mock mode on a public deployment) but still verifies any credential that is presented and enforces its
+scopes. `GUARD_AUTH=required` refuses calls without a valid credential. Anonymous callers share a per-minute
+limit (`GUARD_ANONYMOUS_RPM`); every credential has its own.
+
+| Failure | Response |
+|---|---|
+| No / unknown / revoked / expired credential, bad signature, wrong audience or issuer | `401` with `WWW-Authenticate: Bearer realm="agentpulse-guard", error="invalid_token"` |
+| Valid credential without the needed scope | `403` with `WWW-Authenticate: … error="insufficient_scope", scope="guard:block"` |
+| Rate limit reached | `429` with `Retry-After` |
+
+All errors use OpenAI's shape (`{"error": {"message", "type", "code"}}`), so SDKs raise their usual exceptions
+(`AuthenticationError`, `PermissionDeniedError`, `RateLimitError`).
+
+**Enabling ID tokens.** Set `GUARD_OIDC_ISSUER` (e.g. `https://accounts.google.com` or your Entra / Okta /
+Auth0 tenant) and `GUARD_OIDC_AUDIENCE` (your app's client id). Calls then accept that provider's ID tokens;
+the caller is recorded as `oidc:<email or sub>`. Map roles to scopes by putting `guard:*` names in the claim
+named by `GUARD_OIDC_SCOPES_CLAIM`.
+
+**What is recorded.** Every checked call saves `caller` (`key:<name>`, `oidc:<user>`, `admin`, `anonymous`)
+with the check, shown on the Guard page. Secrets are never stored or logged: keys only as hashes, ID tokens not
+at all, and the caller's credential is never forwarded to the model provider.
+
+**Modes without a credential.**
+
+| Deployment | Anonymous caller |
+|---|---|
+| Local, `MOCK_MODE=false` | Allowed, live models (it is your machine) |
+| Local, `MOCK_MODE=true` | Allowed, mock |
+| Public demo (`MOCK_MODE=true` + `LIVE_ACCESS_CODE`) | Allowed, mock; a wrong code is a `401`; live needs the access code or a key with `guard:live` |
 
 On the hosted demo only the dashboard port is public, so the Guard is tried on its page; run AgentPulse
-yourself (`make up`) to call it from code. Keys of your own model connections never leave the backend; the
-caller's API key is never forwarded upstream.
+yourself (`make up`) to call it from code.
 
 ## Cost and latency
 

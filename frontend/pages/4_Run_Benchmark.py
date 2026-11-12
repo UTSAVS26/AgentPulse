@@ -33,6 +33,51 @@ if not suites or not agents:
     st.info("You need at least one suite and one agent.")
     st.stop()
 
+
+def _chaos_token_panel() -> None:
+    """The secret only Bifrost may use to call the outage-drill endpoint: create or rotate it here."""
+    tok, err = api.get("/chaos/token")
+    if err or not tok:
+        return
+    where = "created on this dashboard" if tok["source"] == "dashboard" else "from the CHAOS_TOKEN setting"
+    st.caption(
+        f"🔑 **Drill token** ({where}"
+        + (f", {tok['created_at'][:16].replace('T', ' ')} UTC" if tok["created_at"] else "")
+        + "): the secret Bifrost presents to the chaos provider, so nobody else can trigger it."
+    )
+    if tok["is_default"]:
+        st.warning(
+            "The shipped default token is in use. Create your own below: it is stored encrypted, set in "
+            "Bifrost at runtime, and never shown again."
+        )
+    if not tok["can_manage"]:
+        st.info(tok["note"])
+        return
+    with st.popover("🔑 Create or change the drill token"):
+        own = st.text_input(
+            "Your own token (optional, 24+ characters)",
+            type="password",
+            key="chaos_own_token",
+            help="Leave empty to generate a strong random one.",
+        )
+        c1, c2 = st.columns(2)
+        if c1.button("Create token", type="primary", key="chaos_create"):
+            res, err = api.post("/chaos/token", json={"token": own.strip()} if own.strip() else None)
+            if not show_error(err):
+                st.session_state["chaos_flash"] = (
+                    "New drill token active in Bifrost. The old one no longer works."
+                )
+                st.rerun()
+        if tok["source"] == "dashboard" and c2.button("Back to CHAOS_TOKEN", key="chaos_reset"):
+            _, err = api.delete("/chaos/token")
+            if not show_error(err):
+                st.session_state["chaos_flash"] = "Using the CHAOS_TOKEN setting again."
+                st.rerun()
+    flash = st.session_state.pop("chaos_flash", None)
+    if flash:
+        st.success(flash)
+
+
 # ------------------------------------------------------------------------------------ configure
 with st.container(border=True):
     st.subheader("Configure a run")
@@ -87,6 +132,19 @@ with st.container(border=True):
         0.05,
         help="Probability that each tool call fails (reliability test).",
     )
+    with st.expander("🌩️ Provider outage drill (Bifrost fallbacks)"):
+        st.caption(
+            "Simulate a provider outage: a share of every agent's model calls is routed through a *chaos* "
+            "provider in Bifrost that fails them (HTTP 503). With fallbacks on, **Bifrost itself** retries "
+            "each failed call on the agent's fallback models (or the same model through its real provider). "
+            "Compare runs with fallbacks on and off to see what the gateway saves. Your own model "
+            "connections are not drilled."
+        )
+        _chaos_token_panel()
+        d1, d2 = st.columns([2, 1])
+        outage_pct = d1.slider("Model calls failed by the outage", 0, 80, 0, 10, format="%d%%")
+        outage_rate = outage_pct / 100
+        drill_fallbacks = d2.checkbox("Bifrost fallbacks on", value=True, disabled=outage_rate == 0)
 
     check_freshness = True
     if suite["time_sensitive_count"]:
@@ -117,6 +175,8 @@ with st.container(border=True):
                 "repeats": repeats,
                 "fault_rate": fault_rate,
                 "check_freshness": check_freshness,
+                "outage_rate": outage_rate,
+                "drill_fallbacks": drill_fallbacks,
             },
         )
         if not show_error(err):
@@ -146,6 +206,11 @@ def render_run() -> None:
 
     c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
     c1.markdown(f"**Status:** {RUN_STATUS.get(run['status'], run['status'])}")
+    if run.get("outage_rate"):
+        c1.caption(
+            f"🌩️ Outage drill: {run['outage_rate']:.0%} of model calls failed on purpose · Bifrost fallbacks "
+            + ("on" if run.get("drill_fallbacks") else "off")
+        )
     c2.metric("Executions", f"{run['progress_done']}/{run['progress_total']}")
     c3.metric("Mode", "mock" if run["mock_mode"] else "live")
     c4.metric("Duration", f"{run['duration_s']:.0f} s" if run["duration_s"] else "–")

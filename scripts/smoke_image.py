@@ -188,6 +188,56 @@ def main() -> int:
         bad = (exc.code, json.loads(exc.read() or b"{}"))
     check("Guard: wrong API key -> 401 (OpenAI error)", bad[0] == 401 and "error" in bad[1], bad)
 
+    # Guard access control: keys are admin-only, shown once, scoped, revocable
+    check(
+        "Guard: issuing a key needs the access code", call("POST", "/guard/keys", {"name": "smoke"})[0] == 403
+    )
+    status, made = call(
+        "POST",
+        "/guard/keys",
+        {"name": "smoke", "scopes": ["guard:annotate"], "rpm": 5},
+        code="smoke-test-code",
+    )
+    secret = made.get("key", "")
+
+    def guard_as(token: str, mode: str) -> int:
+        body = dict(guard_body, guard=mode)
+        r = urllib.request.Request(
+            f"{API}/guard/v1/chat/completions", method="POST", data=json.dumps(body).encode()
+        )
+        r.add_header("content-type", "application/json")
+        r.add_header("Authorization", f"Bearer {token}")
+        try:
+            return urllib.request.urlopen(r, timeout=30).status
+        except urllib.error.HTTPError as exc:
+            return exc.code
+
+    check(
+        "Guard key: issued once (apg_…), allowed mode 200, other mode 403",
+        status == 201
+        and secret.startswith("apg_")
+        and guard_as(secret, "annotate") == 200
+        and guard_as(secret, "block") == 403,
+        (status, guard_as(secret, "annotate"), guard_as(secret, "block")),
+    )
+    key_id = made.get("id")
+    check(
+        "Guard key: revoked -> 401",
+        call("DELETE", f"/guard/keys/{key_id}", code="smoke-test-code")[0] == 204
+        and guard_as(secret, "annotate") == 401,
+    )
+
+    status, tok = call("GET", "/chaos/token")
+    check(
+        "outage-drill token: status never returns the token; cloud image can't manage it",
+        status == 200
+        and tok.get("can_manage") is False
+        and "token" not in tok
+        and tok.get("source") == "environment",
+        tok,
+    )
+    check("outage-drill token: creating one needs the access code", call("POST", "/chaos/token")[0] == 403)
+
     check("wrong access code -> 401", call("GET", "/health", code="nope")[0] == 401)
     status, live = call("GET", "/health", code=CODE)
     check("right access code -> live mode", status == 200 and live.get("mock_mode") is False, live)

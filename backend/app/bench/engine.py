@@ -35,6 +35,7 @@ from app.agents.runtime import AgentSpec, RuntimeConfig, run_agent, save_executi
 from app.bench.pricing import PriceBook
 from app.bench.scoring import ScoreResult, render_expected, score_judge, score_jury, score_output
 from app.clients import LLMClient, MockLLMClient, SearchClient, clients_for
+from app.clients.chaos import chaos_model
 from app.config import Settings, get_settings
 from app.db import get_sessionmaker
 from app.freshness.checker import FreshnessChecker
@@ -102,6 +103,8 @@ class BenchmarkEngine:
         fault_rate: float,
         live: bool = False,
         check_freshness: bool = True,
+        outage_rate: float = 0.0,
+        drill_fallbacks: bool = True,
     ) -> BenchmarkRun:
         suite = db.get(TaskSuite, suite_id)
         if suite is None:
@@ -125,6 +128,8 @@ class BenchmarkEngine:
             fault_rate=fault_rate,
             mock_mode=not live,
             check_freshness=check_freshness,
+            outage_rate=outage_rate or None,
+            drill_fallbacks=drill_fallbacks if outage_rate else None,
             status="pending",
             progress_total=total,
         )
@@ -181,7 +186,10 @@ class BenchmarkEngine:
             ]
             repeats, fault_rate, live = run.repeats, run.fault_rate, not run.mock_mode
             check_freshness = run.check_freshness is not False
+            drill = (run.outage_rate or 0.0, run.drill_fallbacks is not False)
 
+        if live and drill[0]:
+            self._ensure_chaos_token()
         llm, search = self.clients(live)
         freshness = None
         if check_freshness and any(t["time_sensitive"] for t in tasks):
@@ -202,7 +210,7 @@ class BenchmarkEngine:
             ) as pool:
                 futures = [
                     pool.submit(
-                        self._run_agent_tasks, ctx, run_id, agent_id, spec, tasks, repeats, fault_rate
+                        self._run_agent_tasks, ctx, run_id, agent_id, spec, tasks, repeats, fault_rate, drill
                     )
                     for agent_id, spec in agents
                 ]
@@ -234,6 +242,17 @@ class BenchmarkEngine:
             )
             llm.set_event_dates({t["prompt"]: t["event_date"] for t in tasks if t.get("event_date")})
 
+    def _ensure_chaos_token(self) -> None:
+        """Outage drills need Bifrost to hold the current chaos token (it forgets runtime keys on restart)."""
+        from app import chaos_token
+        from app.connection_routes import get_admin
+
+        try:
+            with self.sessions() as db:
+                chaos_token.ensure_applied(db, self.settings, get_admin(self.settings))
+        except Exception:  # noqa: BLE001 - a drill must still start; its calls report the failure
+            log.warning("could not re-apply the chaos token before the drill", exc_info=True)
+
     def _judge(self, ctx: _RunContext) -> Callable[[str, str, str], ScoreResult] | None:
         if not ctx.live:
             return None  # contains fallback, clearly labelled in score_detail
@@ -260,10 +279,12 @@ class BenchmarkEngine:
         tasks: list[dict],
         repeats: int,
         fault_rate: float,
+        drill: tuple[float, bool] = (0.0, True),
     ) -> None:
         config = RuntimeConfig(
             fault_rate=fault_rate,
             sleep_scale=1.0 if ctx.live else self.settings.mock_latency_scale,
+            **drill_route(spec, *drill),
         )
         judge = self._judge(ctx)
         for repeat in range(repeats):
@@ -384,6 +405,19 @@ def get_bench_engine() -> BenchmarkEngine:
         clients=clients_for,
         prices={True: PriceBook(s.bifrost_url), False: PriceBook(None)},
     )
+
+
+def drill_route(spec: AgentSpec, outage_rate: float, fallbacks_on: bool) -> dict:
+    """RuntimeConfig fields for an outage drill: route the agent's model through the chaos provider, with
+    Bifrost fallbacks (the agent's own, else the same model through its real provider) or none.
+
+    Your own model connections (``custom/…``) are called directly, not through the chaos route."""
+    if not outage_rate or spec.model.startswith("custom/"):
+        return {}
+    return {
+        "route_model": chaos_model(spec.model, outage_rate),
+        "fallbacks": (spec.fallbacks or [spec.model]) if fallbacks_on else [],
+    }
 
 
 def task_lookup(db: Session, suite_id: int) -> dict[int, dict]:

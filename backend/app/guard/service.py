@@ -159,7 +159,14 @@ class Guard:
             max_tokens=int(max_tokens) if max_tokens else None,
         )
 
-    def guard(self, db: Session, res: LLMResponse, messages: list[dict[str, Any]], mode: str) -> GuardOutcome:
+    def guard(
+        self,
+        db: Session,
+        res: LLMResponse,
+        messages: list[dict[str, Any]],
+        mode: str,
+        caller: str | None = None,
+    ) -> GuardOutcome:
         content = res.content or ""
         info: dict[str, Any] = {"guard_mode": mode, "checked": False}
         if mode == "off":
@@ -196,6 +203,7 @@ class Guard:
             source="guard",
             model=res.model,
             guard_action=action,
+            caller=caller,
         )
         db.commit()
         info.update(
